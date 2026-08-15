@@ -85,15 +85,18 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     if hatalar:
         return {}, uyarilar, hatalar
 
-    # GEÇİCİ bloklar → kapasite
-    gecici_blok: dict[str, int] = {}
+    # GEÇİCİ bloklar → saat bloğundan fallback süre
+    gecici_blok_saat: dict[str, int] = {}
+    gecici_pf_per_sicil: dict[str, list] = {}   # hangi sicil hangi GEÇİCİ portföylere gidiyor
     for _, row in gecici_df.iterrows():
-        s = row["Sicil"]
+        s, pf = row["Sicil"], row["Portfoy"]
         blok = _parse_hhmm(row["Bitis Zamani"]) - _parse_hhmm(row["Baslangic Zamani"])
-        gecici_blok[s] = gecici_blok.get(s, 0) + max(0, blok)
+        gecici_blok_saat[s] = gecici_blok_saat.get(s, 0) + max(0, blok)
+        gecici_pf_per_sicil.setdefault(s, []).append(pf)
 
     GUN_SN = gun_kapasite_sn(saatlik_mola_dk, ogle_arasi_dk)
-    capacity: dict[str, float] = {s: float(GUN_SN - gecici_blok.get(s, 0)) for s in tum_siciller}
+    # capacity Sicil_Hiz işlendikten sonra güncellenecek; şimdilik saat bloğuyla başlat
+    capacity: dict[str, float] = {s: float(GUN_SN - gecici_blok_saat.get(s, 0)) for s in tum_siciller}
 
     ana_atama_mevcut: dict[str, str] = {}
     for _, row in ana_df.iterrows():
@@ -271,6 +274,33 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
 
     max_speed = max(speed_raw.values()) if speed_raw else 1.0
     speed_norm: dict[str, float] = {s: speed_raw[s] / max_speed for s in tum_siciller}
+
+    # ── GEÇİCİ kapasite: Sicil_Hiz gerçek verisiyle güncelle ────────────────
+    # Sicil_Hiz'de (sicil, gecici_pf) çifti varsa → gerçek ortalama süreyi kullan.
+    # Yoksa → Mevcut_Atama'daki saat bloğu (bas-bit) fallback olarak kalır.
+    for s, pf_listesi in gecici_pf_per_sicil.items():
+        gercek_toplam = 0.0
+        saat_toplam = gecici_blok_saat.get(s, 0)
+        herhangi_gercek = False
+        for pf in pf_listesi:
+            gercek = sicil_portfoy_sure.get((s, pf))
+            if gercek is not None:
+                gercek_toplam += gercek
+                herhangi_gercek = True
+            else:
+                # Bu portföy için Sicil_Hiz'de veri yok; saat bloğundaki payını ekle
+                pf_saat = _parse_hhmm(
+                    gecici_df.loc[
+                        (gecici_df["Sicil"] == s) & (gecici_df["Portfoy"] == pf), "Bitis Zamani"
+                    ].values[0]
+                ) - _parse_hhmm(
+                    gecici_df.loc[
+                        (gecici_df["Sicil"] == s) & (gecici_df["Portfoy"] == pf), "Baslangic Zamani"
+                    ].values[0]
+                )
+                gercek_toplam += max(0, pf_saat)
+        if herhangi_gercek:
+            capacity[s] = float(GUN_SN - gercek_toplam)
 
     # ── Sicil toplam günlük çalışma süresi ───────────────────────────────────
     sicil_toplam_sure: dict[str, float] = {}
