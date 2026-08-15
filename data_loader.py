@@ -153,16 +153,20 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     if med:
         om_ref_col = _col(piy, "Gunluk Medyan OM`ye Yonlendirilen Referans Adedi")
         om_disi_col = _col(piy, "Gunluk Medyan OM`ye Yonlendirilmeyen Islem Adedi")
+        piy_ref_col = _col(piy, "Gunluk Medyan Referans Adedi")
     else:
         om_ref_col = _col(piy, "Gunluk Ortalama OM`ye Yonlendirilen Referans Adedi")
         om_disi_col = _col(piy, "Gunluk Ortalama OM`ye Yonlendirilmeyen Islem Adedi")
+        piy_ref_col = _col(piy, "Günlük Ortalama Referans Adedi", "Gunluk Ortalama Referans Adedi")
 
     om_ref_adedi: dict[str, float] = {}
     om_disi_islem_adedi: dict[str, float] = {}
+    portfoy_daily_refs: dict[str, float] = {}
     for _, row in piy.iterrows():
         pf = row["Portfoy"]
         om_ref_adedi[pf] = float(row[om_ref_col]) if om_ref_col and not pd.isna(row.get(om_ref_col, None)) else 0.0
         om_disi_islem_adedi[pf] = float(row[om_disi_col]) if om_disi_col and not pd.isna(row.get(om_disi_col, None)) else 0.0
+        portfoy_daily_refs[pf] = float(row[piy_ref_col]) if piy_ref_col and not pd.isna(row.get(piy_ref_col, None)) else 0.0
 
     # ── Portfoy_Aktif_Sicil ───────────────────────────────────────────────────
     pas = sheets["Portfoy_Aktif_Sicil"].copy()
@@ -192,58 +196,6 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         portfoy_om_sure[pf] = float(row[om_sure_col]) if om_sure_col and not pd.isna(row.get(om_sure_col)) else 0.0
         portfoy_om_disi_sure[pf] = float(row[om_disi_sure_col]) if om_disi_sure_col and not pd.isna(row.get(om_disi_sure_col)) else 0.0
 
-    # Talep hesabı: iki bileşenli
-    demand: dict[str, float] = {}
-    for pf in tum_portfoyler:
-        aktif = portfoy_aktif.get(pf, 1.0)
-        if aktif <= 0:
-            aktif = 1.0
-
-        # OM bileşeni: birim sure = portfoy_om_sure / (om_ref_adedi / aktif)
-        om_r = om_ref_adedi.get(pf, 0.0)
-        om_s = portfoy_om_sure.get(pf, 0.0)
-        if om_r > 0:
-            om_birim = om_s / (om_r / aktif)
-            om_demand = om_r * om_birim
-        else:
-            om_demand = 0.0
-
-        # OM dışı bileşeni: birim sure = portfoy_om_disi_sure / (om_disi_islem_adedi / aktif)
-        disi_r = om_disi_islem_adedi.get(pf, 0.0)
-        disi_s = portfoy_om_disi_sure.get(pf, 0.0)
-        if disi_r > 0:
-            disi_birim = disi_s / (disi_r / aktif)
-            disi_demand = disi_r * disi_birim
-        else:
-            disi_demand = 0.0
-
-        if om_demand == 0.0 and disi_demand == 0.0:
-            demand[pf] = aktif * portfoy_sicil_sure.get(pf, 0.0)
-        else:
-            demand[pf] = om_demand + disi_demand
-
-    # Verisi olmayan iç portföyler için ortalama ile doldur
-    ic_demand_vals = [demand[pf] for pf in ic_pf if demand.get(pf, 0.0) > 0]
-    ic_aktif_vals = [portfoy_aktif[pf] for pf in ic_pf if portfoy_aktif.get(pf, 0.0) > 0]
-    ic_sicil_sure_vals = [portfoy_sicil_sure[pf] for pf in ic_pf if portfoy_sicil_sure.get(pf, 0.0) > 0]
-    ic_om_sure_vals = [portfoy_om_sure[pf] for pf in ic_pf if portfoy_om_sure.get(pf, 0.0) > 0]
-    ic_disi_sure_vals = [portfoy_om_disi_sure[pf] for pf in ic_pf if portfoy_om_disi_sure.get(pf, 0.0) > 0]
-
-    ort_demand = sum(ic_demand_vals) / len(ic_demand_vals) if ic_demand_vals else 0.0
-    ort_aktif = sum(ic_aktif_vals) / len(ic_aktif_vals) if ic_aktif_vals else 1.0
-    ort_sicil_sure = sum(ic_sicil_sure_vals) / len(ic_sicil_sure_vals) if ic_sicil_sure_vals else 0.0
-    ort_om_sure = sum(ic_om_sure_vals) / len(ic_om_sure_vals) if ic_om_sure_vals else 0.0
-    ort_disi_sure = sum(ic_disi_sure_vals) / len(ic_disi_sure_vals) if ic_disi_sure_vals else 0.0
-
-    for pf in ic_pf:
-        if demand.get(pf, 0.0) == 0.0:
-            demand[pf] = ort_demand
-            portfoy_aktif.setdefault(pf, ort_aktif)
-            portfoy_sicil_sure.setdefault(pf, ort_sicil_sure)
-            portfoy_om_sure.setdefault(pf, ort_om_sure)
-            portfoy_om_disi_sure.setdefault(pf, ort_disi_sure)
-            uyarilar.append(f"Portföy '{pf}': veri bulunamadı, diğer portföylerin ortalaması kullanıldı.")
-
     # ── Sicil_Hiz ─────────────────────────────────────────────────────────────
     sh = sheets["Sicil_Hiz"].copy()
     sh["Sicil"] = _cs(sh["Sicil"])
@@ -251,6 +203,7 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     sh = sh[(sh["Sicil"] != "") & (sh["Portfoy"] != "")]
 
     hiz_col = _col(sh, "Gunluk Medyan Calisma Suresi", "Gunluk Ortalama Calisma Suresi")
+    sh_ref_col = _col(sh, "Gunluk Medyan Referans Adedi", "Gunluk Ortalama Referans Adedi")
     if not hiz_col:
         uyarilar.append("Sicil_Hiz: hız kolonu bulunamadı.")
 
@@ -263,6 +216,29 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
                 sicil_portfoy_sure[(s, pf)] = float(row[hiz_col])
             except Exception:
                 pass
+
+    # portföy bazında ortalama referans başına süre → talep hesabı için
+    pf_ref_sure: dict[str, list] = {pf: [] for pf in ic_pf}
+    if hiz_col and sh_ref_col:
+        for _, row in sh.iterrows():
+            s, pf = row["Sicil"], row["Portfoy"]
+            if pf not in pf_ref_sure:
+                continue
+            sure = sicil_portfoy_sure.get((s, pf), 0.0)
+            try:
+                refs = float(row[sh_ref_col])
+            except Exception:
+                refs = 0.0
+            if refs > 0 and sure > 0:
+                pf_ref_sure[pf].append(sure / refs)
+    portfoy_time_per_ref: dict[str, float] = {
+        pf: sum(v) / len(v) if v else 0.0
+        for pf, v in pf_ref_sure.items()
+    }
+    global_time_per_ref = (
+        sum(portfoy_time_per_ref.values()) / len([v for v in portfoy_time_per_ref.values() if v > 0])
+        if any(v > 0 for v in portfoy_time_per_ref.values()) else 0.0
+    )
 
     speed_raw: dict[str, float] = {}
     if hiz_col:
@@ -308,6 +284,26 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
             portfoy_destek_avg[pf] = sum(destek_sure_vals[pf]) / len(destek_sure_vals[pf])
         else:
             portfoy_destek_avg[pf] = global_destek_avg
+
+    # ── Talep: günlük referans adedi × referans başına süre ──────────────────
+    demand: dict[str, float] = {}
+    for pf in tum_portfoyler:
+        daily_refs = portfoy_daily_refs.get(pf, 0.0)
+        tpr = portfoy_time_per_ref.get(pf, 0.0) or global_time_per_ref
+        if daily_refs > 0 and tpr > 0:
+            demand[pf] = daily_refs * tpr
+        else:
+            # fallback: aktif sicil × sicil başı süre
+            aktif = max(portfoy_aktif.get(pf, 1.0), 1.0)
+            demand[pf] = aktif * portfoy_sicil_sure.get(pf, 0.0)
+
+    # Verisi olmayan iç portföyler için ortalama ile doldur
+    ic_demand_vals = [demand[pf] for pf in ic_pf if demand.get(pf, 0.0) > 0]
+    ort_demand = sum(ic_demand_vals) / len(ic_demand_vals) if ic_demand_vals else 0.0
+    for pf in ic_pf:
+        if demand.get(pf, 0.0) == 0.0:
+            demand[pf] = ort_demand
+            uyarilar.append(f"Portföy '{pf}': talep verisi bulunamadı, ortalama kullanıldı.")
 
     # ── Eligible set: tüm (sicil × iç portföy), yalnızca istisna çıkar ──────
     eligible: set[tuple] = set()
