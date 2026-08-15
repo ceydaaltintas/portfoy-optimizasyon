@@ -278,7 +278,7 @@ if tum_uyarilar:
             st.warning(f"• {u}")
 
 # ── SONUÇ SEKMELERİ ───────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4 = st.tabs(["Portföy Özet", "Sicil Özet", "Atama Matrisi", "Veri Uyarıları"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Portföy Özet", "Sicil Özet", "Atama Matrisi", "Karşılaştırma", "Veri Uyarıları"])
 
 ana_atama = sonuc["ana_atama"]
 destek_atama = sonuc["destek_atama"]
@@ -399,6 +399,68 @@ with tab3:
     )
 
 with tab4:
+    st.subheader("Eski / Yeni Yetki Karşılaştırması")
+    mevcut_ana = data.get("ana_atama_mevcut", {})
+    ma_raw = data.get("mevcut_atama_raw", {})
+
+    eski_destek_per_sicil = {s: set() for s in tum_siciller}
+    for s in tum_siciller:
+        for rol, pf in ma_raw.get(s, []):
+            if rol == "DESTEK" and pf in ic_pf:
+                eski_destek_per_sicil[s].add(pf)
+
+    yeni_destek_per_sicil = {s: set() for s in tum_siciller}
+    for s, pf in destek_atama:
+        yeni_destek_per_sicil[s].add(pf)
+
+    karsi_rows = []
+    for s in tum_siciller:
+        eski_ana = mevcut_ana.get(s, "—")
+        yeni_ana = ana_atama.get(s, "—")
+        eski_d = eski_destek_per_sicil[s]
+        yeni_d = yeni_destek_per_sicil[s]
+        eklenen = yeni_d - eski_d
+        cikarilan = eski_d - yeni_d
+        karsi_rows.append({
+            "Sicil": s,
+            "Eski ANA": eski_ana,
+            "Yeni ANA": yeni_ana,
+            "ANA Değişti?": "✓ EVET" if eski_ana != yeni_ana else "hayır",
+            "Eski DESTEK": ", ".join(sorted(eski_d)) if eski_d else "—",
+            "Yeni DESTEK": ", ".join(sorted(yeni_d)) if yeni_d else "—",
+            "Eklenen DESTEK": ", ".join(sorted(eklenen)) if eklenen else "—",
+            "Çıkarılan DESTEK": ", ".join(sorted(cikarilan)) if cikarilan else "—",
+        })
+
+    df_karsi = pd.DataFrame(karsi_rows)
+
+    def _renk_karsi(row):
+        renkler = [""] * len(row.index)
+        idx = list(row.index)
+        if row["ANA Değişti?"].startswith("✓"):
+            for col in ["Eski ANA", "Yeni ANA", "ANA Değişti?"]:
+                renkler[idx.index(col)] = "background-color: #FFE699"
+        if row["Eklenen DESTEK"] != "—":
+            renkler[idx.index("Eklenen DESTEK")] = "background-color: #C6EFCE"
+        if row["Çıkarılan DESTEK"] != "—":
+            renkler[idx.index("Çıkarılan DESTEK")] = "background-color: #FFC7CE"
+        return renkler
+
+    st.dataframe(
+        df_karsi.style.apply(_renk_karsi, axis=1),
+        use_container_width=True,
+        hide_index=True,
+    )
+    degisen_ana = sum(1 for r in karsi_rows if r["ANA Değişti?"].startswith("✓"))
+    eklenen_destek = sum(1 for r in karsi_rows if r["Eklenen DESTEK"] != "—")
+    cikarilan_destek = sum(1 for r in karsi_rows if r["Çıkarılan DESTEK"] != "—")
+    st.caption(
+        f"ANA değişen: **{degisen_ana}** sicil  |  "
+        f"DESTEK eklenen: **{eklenen_destek}** sicil  |  "
+        f"DESTEK çıkarılan: **{cikarilan_destek}** sicil"
+    )
+
+with tab5:
     st.subheader("Veri Uyarıları")
     if tum_uyarilar:
         for i, u in enumerate(tum_uyarilar, 1):

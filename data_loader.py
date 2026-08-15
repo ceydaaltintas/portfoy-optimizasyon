@@ -88,6 +88,12 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     for _, row in ana_df.iterrows():
         ana_atama_mevcut[row["Sicil"]] = row["Portfoy"]
 
+    # Eski DESTEK listesi (karşılaştırma sayfası için)
+    mevcut_atama_raw: dict[str, list] = {s: [] for s in tum_siciller}
+    for _, row in ma.iterrows():
+        s, pf, rol = row["Sicil"], row["Portfoy"], row["Portfoy Seviyesi"]
+        mevcut_atama_raw[s].append((rol, pf))
+
     gecici_mevcut = [
         {"sicil": r["Sicil"], "portfoy": r["Portfoy"],
          "bas": r.get("Baslangic Zamani", ""), "bit": r.get("Bitis Zamani", "")}
@@ -277,4 +283,5 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         "sicil_portfoy_sure": sicil_portfoy_sure,
         "sicil_toplam_sure": sicil_toplam_sure,
         "portfoy_destek_avg": portfoy_destek_avg,
+        "mevcut_atama_raw": mevcut_atama_raw,
     }, uyarilar, hatalar

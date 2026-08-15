@@ -170,12 +170,69 @@ def export(sonuc: dict, data: dict) -> bytes:
                     round(capacity.get(g["sicil"], 0), 0), round(speed_raw.get(g["sicil"], 0), 0)])
     _style_sheet(ws4)
 
-    # ── 5. Veri Uyarıları ────────────────────────────────────────────────────
-    ws5 = wb.create_sheet("Veri Uyarıları")
-    ws5.append(["#", "Uyarı"])
-    for i, u in enumerate(uyarilar, 1):
-        ws5.append([i, u])
+    # ── 5. Karşılaştırma ─────────────────────────────────────────────────────
+    ws5 = wb.create_sheet("Karşılaştırma")
+    ws5.append([
+        "Sicil",
+        "Eski ANA", "Yeni ANA", "ANA Değişti?",
+        "Eski DESTEK", "Yeni DESTEK",
+        "Eklenen DESTEK", "Çıkarılan DESTEK",
+    ])
+
+    mevcut_ana = data.get("ana_atama_mevcut", {})
+    ma_raw = data.get("mevcut_atama_raw", {})
+
+    eski_destek_per_sicil = {s: set() for s in tum_siciller}
+    for s in tum_siciller:
+        for rol, pf in ma_raw.get(s, []):
+            if rol == "DESTEK" and pf in ic_pf:
+                eski_destek_per_sicil[s].add(pf)
+
+    yeni_destek_per_sicil = {s: set() for s in tum_siciller}
+    for s, pf in destek_atama:
+        yeni_destek_per_sicil[s].add(pf)
+
+    DEGISTI_FILL = PatternFill("solid", fgColor="FFE699")
+    EKLENDI_FILL = PatternFill("solid", fgColor="C6EFCE")
+    CIKARILDI_FILL = PatternFill("solid", fgColor="FFC7CE")
+
+    for s in tum_siciller:
+        eski_ana = mevcut_ana.get(s, "—")
+        yeni_ana = ana_atama.get(s, "—")
+        ana_degisti = "EVET" if eski_ana != yeni_ana else "hayır"
+
+        eski_d = eski_destek_per_sicil[s]
+        yeni_d = yeni_destek_per_sicil[s]
+        eklenen = yeni_d - eski_d
+        cikarilan = eski_d - yeni_d
+
+        ws5.append([
+            s,
+            eski_ana, yeni_ana, ana_degisti,
+            ", ".join(sorted(eski_d)) if eski_d else "—",
+            ", ".join(sorted(yeni_d)) if yeni_d else "—",
+            ", ".join(sorted(eklenen)) if eklenen else "—",
+            ", ".join(sorted(cikarilan)) if cikarilan else "—",
+        ])
+
+        r = ws5.max_row
+        if ana_degisti == "EVET":
+            ws5.cell(r, 2).fill = DEGISTI_FILL
+            ws5.cell(r, 3).fill = DEGISTI_FILL
+            ws5.cell(r, 4).fill = DEGISTI_FILL
+        if eklenen:
+            ws5.cell(r, 7).fill = EKLENDI_FILL
+        if cikarilan:
+            ws5.cell(r, 8).fill = CIKARILDI_FILL
+
     _style_sheet(ws5)
+
+    # ── 6. Veri Uyarıları ────────────────────────────────────────────────────
+    ws6 = wb.create_sheet("Veri Uyarıları")
+    ws6.append(["#", "Uyarı"])
+    for i, u in enumerate(uyarilar, 1):
+        ws6.append([i, u])
+    _style_sheet(ws6)
 
     buf = io.BytesIO()
     wb.save(buf)
