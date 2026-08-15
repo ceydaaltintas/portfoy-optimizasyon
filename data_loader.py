@@ -53,6 +53,10 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         if c not in ma.columns:
             ma[c] = ""
 
+    _nan_vals = {"nan", "none", ""}
+    ma = ma[~ma["Sicil"].str.lower().isin(_nan_vals)]
+    ma = ma[~ma["Portfoy"].str.lower().isin(_nan_vals)]
+
     tum_siciller = sorted(ma["Sicil"].unique().tolist())
     tum_portfoyler = sorted(ma["Portfoy"].unique().tolist())
 
