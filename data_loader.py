@@ -44,7 +44,11 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
 
     ma["Sicil"] = ma["Sicil"].astype(str).str.strip()
     ma["Portfoy"] = ma["Portfoy"].astype(str).str.strip()
-    ma["Portfoy Seviyesi"] = ma["Portfoy Seviyesi"].astype(str).str.strip().str.upper()
+    ma["Portfoy Seviyesi"] = (
+        ma["Portfoy Seviyesi"].astype(str).str.strip()
+        .replace({"1": "ANA", "5": "DESTEK", "2": "GECİCİ"})
+        .str.upper()
+    )
     for c in ["Baslangic Zamani", "Bitis Zamani"]:
         if c not in ma.columns:
             ma[c] = ""
