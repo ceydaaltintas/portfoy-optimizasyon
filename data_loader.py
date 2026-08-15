@@ -136,8 +136,10 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     piy["Portfoy"] = piy["Portfoy"].astype(str).str.strip()
 
     # Portfoy_Is_Yuku'daki yeni portföyleri ic_pf'e ekle (Mevcut_Atama'da olmasa bile)
-    for pf in piy["Portfoy"].unique():
-        if pf and pf not in ("nan", "None", "") and pf not in tum_portfoyler:
+    piy_portfoyler = [str(p).strip() for p in piy["Portfoy"].dropna().unique()
+                      if str(p).strip().lower() not in ("nan", "none", "")]
+    for pf in piy_portfoyler:
+        if pf not in tum_portfoyler:
             tum_portfoyler.append(pf)
             uyarilar.append(f"Portföy '{pf}': Mevcut_Atama'da yok, yeni portföy olarak eklendi.")
     tum_portfoyler = sorted(tum_portfoyler)
