@@ -202,12 +202,31 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
             disi_demand = 0.0
 
         if om_demand == 0.0 and disi_demand == 0.0:
-            # Fallback: aktif_sicil × sicil_sure
             demand[pf] = aktif * portfoy_sicil_sure.get(pf, 0.0)
-            if pf in ic_pf:
-                uyarilar.append(f"Portföy '{pf}': OM/OM-dışı adet verisi eksik, fallback hesap kullanıldı.")
         else:
             demand[pf] = om_demand + disi_demand
+
+    # Verisi olmayan iç portföyler için ortalama ile doldur
+    ic_demand_vals = [demand[pf] for pf in ic_pf if demand.get(pf, 0.0) > 0]
+    ic_aktif_vals = [portfoy_aktif[pf] for pf in ic_pf if portfoy_aktif.get(pf, 0.0) > 0]
+    ic_sicil_sure_vals = [portfoy_sicil_sure[pf] for pf in ic_pf if portfoy_sicil_sure.get(pf, 0.0) > 0]
+    ic_om_sure_vals = [portfoy_om_sure[pf] for pf in ic_pf if portfoy_om_sure.get(pf, 0.0) > 0]
+    ic_disi_sure_vals = [portfoy_om_disi_sure[pf] for pf in ic_pf if portfoy_om_disi_sure.get(pf, 0.0) > 0]
+
+    ort_demand = sum(ic_demand_vals) / len(ic_demand_vals) if ic_demand_vals else 0.0
+    ort_aktif = sum(ic_aktif_vals) / len(ic_aktif_vals) if ic_aktif_vals else 1.0
+    ort_sicil_sure = sum(ic_sicil_sure_vals) / len(ic_sicil_sure_vals) if ic_sicil_sure_vals else 0.0
+    ort_om_sure = sum(ic_om_sure_vals) / len(ic_om_sure_vals) if ic_om_sure_vals else 0.0
+    ort_disi_sure = sum(ic_disi_sure_vals) / len(ic_disi_sure_vals) if ic_disi_sure_vals else 0.0
+
+    for pf in ic_pf:
+        if demand.get(pf, 0.0) == 0.0:
+            demand[pf] = ort_demand
+            portfoy_aktif.setdefault(pf, ort_aktif)
+            portfoy_sicil_sure.setdefault(pf, ort_sicil_sure)
+            portfoy_om_sure.setdefault(pf, ort_om_sure)
+            portfoy_om_disi_sure.setdefault(pf, ort_disi_sure)
+            uyarilar.append(f"Portföy '{pf}': veri bulunamadı, diğer portföylerin ortalaması kullanıldı.")
 
     # ── Sicil_Hiz ─────────────────────────────────────────────────────────────
     sh = sheets["Sicil_Hiz"].copy()
