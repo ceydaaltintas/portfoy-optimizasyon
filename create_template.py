@@ -68,7 +68,7 @@ SHEETS = {
     },
     "Istisna": {
         "cols": ["Sicil", "Portfoy"],
-        "note": "Bu tablodaki (Sicil, Portfoy) çiftlerine hiçbir zaman DESTEK ataması yapılmaz.",
+        "note": "İki kullanım: (1) Sicil + Portfoy dolu → o çifte hiç atama yapılmaz. (2) Sadece Sicil dolu, Portfoy boş → o sicil optimizasyondan tamamen dışlanır.",
     },
 }
 

@@ -107,13 +107,29 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     # ── İstisna ───────────────────────────────────────────────────────────────
     ist = sheets["Istisna"].copy()
     istisna_set: set[tuple] = set()
-    if not ist.empty and "Sicil" in ist.columns and "Portfoy" in ist.columns:
+    istisna_sicil: set[str] = set()
+    if not ist.empty and "Sicil" in ist.columns:
         ist["Sicil"] = ist["Sicil"].astype(str).str.strip()
-        ist["Portfoy"] = ist["Portfoy"].astype(str).str.strip()
-        istisna_set = set(zip(ist["Sicil"], ist["Portfoy"]))
-        for _, row in ist.iterrows():
-            if row["Portfoy"] not in tum_portfoyler:
-                uyarilar.append(f"İstisna: Portföy '{row['Portfoy']}' Mevcut_Atama'da yok.")
+        if "Portfoy" in ist.columns:
+            ist["Portfoy"] = ist["Portfoy"].astype(str).str.strip()
+            for _, row in ist.iterrows():
+                pf = row["Portfoy"]
+                s = row["Sicil"]
+                if pf in ("", "nan", "None"):
+                    # Portföy boşsa sicili tamamen dışla
+                    istisna_sicil.add(s)
+                else:
+                    istisna_set.add((s, pf))
+                    if pf not in tum_portfoyler:
+                        uyarilar.append(f"İstisna: Portföy '{pf}' Mevcut_Atama'da yok.")
+        else:
+            # Sadece Sicil kolonu varsa tüm satırlar sicil istisnası
+            for s in ist["Sicil"].unique():
+                istisna_sicil.add(s)
+
+    if istisna_sicil:
+        uyarilar.append(f"Optimizasyondan dışlanan siciller: {', '.join(sorted(istisna_sicil))}")
+        tum_siciller = [s for s in tum_siciller if s not in istisna_sicil]
 
     # ── Portfoy_Is_Yuku ───────────────────────────────────────────────────────
     piy = sheets["Portfoy_Is_Yuku"].copy()
