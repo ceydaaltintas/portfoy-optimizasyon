@@ -97,7 +97,17 @@ def create_sample(path: str = "sample_data/ornek_veri.xlsx"):
             om_oran = random.uniform(0.50, 0.75)
             om_ref_sure = int(cal * om_oran)
             om_disi_sure = cal - om_ref_sure
-            ref_ort = random.randint(20, 80)
+            # Sicil ref sayısı: portföy toplam ref'i / o portföyde çalışan sicil sayısı
+            pf_n_sicil = max(len(sheet1[
+                (sheet1["Portfoy"] == pf) &
+                (sheet1["Portfoy Seviyesi"].isin(["ANA", "DESTEK"]))
+            ]), 1)
+            pf_row = sheet2[sheet2["Portfoy"] == pf]
+            if not pf_row.empty:
+                pf_daily_refs = float(pf_row["Günlük Ortalama Referans Adedi"].values[0])
+            else:
+                pf_daily_refs = 30.0
+            ref_ort = max(1, round(pf_daily_refs / pf_n_sicil * random.uniform(0.8, 1.2)))
             gun = random.randint(15, 22)
             rows3.append({
                 "Portfoy": pf,
