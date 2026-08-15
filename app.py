@@ -63,7 +63,17 @@ if mod == "Tek Excel dosyası (.xlsx)":
             if missing:
                 st.error(f"Eksik sekme(ler): {', '.join(missing)}")
             else:
-                raw_sheets = {s: xl.parse(s) for s in SHEET_NAMES}
+                # Şablon formatında 1. satır açıklama notu, 2. satır başlıktır.
+                # İlk satır başlık değilse (kolon adı 50+ karakter veya "Sicil"/"Portfoy" yok)
+                # header=1 ile yeniden oku.
+                def _parse_sheet(xl, name):
+                    df = xl.parse(name, header=0)
+                    cols = [str(c) for c in df.columns]
+                    first = cols[0] if cols else ""
+                    if len(first) > 50 or not any(k in cols for k in ["Sicil", "Portfoy", "Gunluk"]):
+                        df = xl.parse(name, header=1)
+                    return df
+                raw_sheets = {s: _parse_sheet(xl, s) for s in SHEET_NAMES}
                 st.success("Dosya başarıyla yüklendi.")
         except Exception as e:
             st.error(f"Dosya okuma hatası: {e}")
