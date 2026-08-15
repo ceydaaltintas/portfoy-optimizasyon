@@ -123,17 +123,18 @@ except Exception as e:
     st.stop()
 
 st.subheader("Veri Kontrol Raporu")
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Toplam Sicil", len(data_check["tum_siciller"]))
-c2.metric("İç Portföy", len(data_check["ic_portfoyler"]))
-c3.metric("GECİCİ Portföy", len(data_check["gecici_portfoyler"]))
-c4.metric("İstisna Çifti", len(data_check["istisna_set"]))
 
 if hata_check:
     st.error("**Kritik Hatalar — Optimizasyon çalıştırılamaz:**")
     for h in hata_check:
         st.error(f"• {h}")
     st.stop()
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Toplam Sicil", len(data_check["tum_siciller"]))
+c2.metric("İç Portföy", len(data_check["ic_portfoyler"]))
+c3.metric("GECİCİ Portföy", len(data_check["gecici_portfoyler"]))
+c4.metric("İstisna Çifti", len(data_check["istisna_set"]))
 
 if uyari_check:
     with st.expander(f"⚠️ {len(uyari_check)} uyarı var — detaylar için tıklayın"):
