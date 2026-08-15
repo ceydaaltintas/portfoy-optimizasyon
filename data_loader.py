@@ -117,16 +117,15 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         ist = ist[~ist["Sicil"].str.lower().isin(_nan_vals)]
         if "Portfoy" in ist.columns:
             ist["Portfoy"] = ist["Portfoy"].astype(str).str.strip()
-            for _, row in ist.iterrows():
-                pf = row["Portfoy"]
-                s = row["Sicil"]
-                if pf.lower() in _nan_vals:
-                    # Portföy boşsa sicili tamamen dışla
-                    istisna_sicil.add(s)
-                else:
-                    istisna_set.add((s, pf))
-                    if pf not in tum_portfoyler:
-                        uyarilar.append(f"İstisna: Portföy '{pf}' Mevcut_Atama'da yok.")
+            # Portfoy boş → sicili tamamen dışla
+            for _, row in ist[ist["Portfoy"].str.lower().isin(_nan_vals)].iterrows():
+                istisna_sicil.add(row["Sicil"])
+            # Portfoy dolu → çift istisna
+            for _, row in ist[~ist["Portfoy"].str.lower().isin(_nan_vals)].iterrows():
+                pf, s = row["Portfoy"], row["Sicil"]
+                istisna_set.add((s, pf))
+                if pf not in tum_portfoyler:
+                    uyarilar.append(f"İstisna: Portföy '{pf}' Mevcut_Atama'da yok.")
         else:
             # Sadece Sicil kolonu varsa tüm satırlar sicil istisnası
             for s in ist["Sicil"].unique():
