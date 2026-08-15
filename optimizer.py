@@ -25,7 +25,7 @@ def optimize(
     sicil_toplam_sure: dict[str, float] = data.get("sicil_toplam_sure", {})
     portfoy_destek_avg: dict[str, float] = data.get("portfoy_destek_avg", {})
 
-    solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=30)
+    solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=120, gapRel=0.05)
 
     # ── ANA KATMANI ───────────────────────────────────────────────────────────
     if ana_sabit:
@@ -180,7 +180,9 @@ def optimize(
         if pf_list:
             hiz_toplam = pulp.lpSum(speed_norm.get(u2, global_speed) * y[(u2, p2)] for (u2, p2) in pf_list)
             hedef = global_speed * pulp.lpSum(y[(u2, p2)] for (u2, p2) in pf_list)
-            model_d += hiz_toplam - hedef == sapma_pos[pf] - sapma_neg[pf]
+            # inequality formülasyonu: LP relaxation daha sıkı, CBC daha hızlı çözüyor
+            model_d += sapma_pos[pf] >= hiz_toplam - hedef
+            model_d += sapma_neg[pf] >= hedef - hiz_toplam
 
     n_pf = max(len(ic_pf), 1)
     hiz_dengesi_penalty = pulp.lpSum(sapma_pos[pf] + sapma_neg[pf] for pf in ic_pf) / n_pf
