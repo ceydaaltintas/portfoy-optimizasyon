@@ -135,6 +135,14 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     piy = sheets["Portfoy_Is_Yuku"].copy()
     piy["Portfoy"] = piy["Portfoy"].astype(str).str.strip()
 
+    # Portfoy_Is_Yuku'daki yeni portföyleri ic_pf'e ekle (Mevcut_Atama'da olmasa bile)
+    for pf in piy["Portfoy"].unique():
+        if pf and pf not in ("nan", "None", "") and pf not in tum_portfoyler:
+            tum_portfoyler.append(pf)
+            uyarilar.append(f"Portföy '{pf}': Mevcut_Atama'da yok, yeni portföy olarak eklendi.")
+    tum_portfoyler = sorted(tum_portfoyler)
+    ic_pf = [p for p in tum_portfoyler if p not in gecici_pf]
+
     if med:
         om_ref_col = _col(piy, "Gunluk Medyan OM`ye Yonlendirilen Referans Adedi")
         om_disi_col = _col(piy, "Gunluk Medyan OM`ye Yonlendirilmeyen Islem Adedi")
