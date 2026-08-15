@@ -114,12 +114,13 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     istisna_sicil: set[str] = set()
     if not ist.empty and "Sicil" in ist.columns:
         ist["Sicil"] = ist["Sicil"].astype(str).str.strip()
+        ist = ist[~ist["Sicil"].str.lower().isin(_nan_vals)]
         if "Portfoy" in ist.columns:
             ist["Portfoy"] = ist["Portfoy"].astype(str).str.strip()
             for _, row in ist.iterrows():
                 pf = row["Portfoy"]
                 s = row["Sicil"]
-                if pf in ("", "nan", "None"):
+                if pf.lower() in _nan_vals:
                     # Portföy boşsa sicili tamamen dışla
                     istisna_sicil.add(s)
                 else:
@@ -156,6 +157,8 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         om_ref_col = _col(piy, "Gunluk Ortalama OM`ye Yonlendirilen Referans Adedi")
         om_disi_col = _col(piy, "Gunluk Ortalama OM`ye Yonlendirilmeyen Islem Adedi")
 
+    piy = piy[~piy["Portfoy"].str.lower().isin(_nan_vals)]
+
     om_ref_adedi: dict[str, float] = {}
     om_disi_islem_adedi: dict[str, float] = {}
     for _, row in piy.iterrows():
@@ -166,6 +169,7 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     # ── Portfoy_Aktif_Sicil ───────────────────────────────────────────────────
     pas = sheets["Portfoy_Aktif_Sicil"].copy()
     pas["Portfoy"] = pas["Portfoy"].astype(str).str.strip()
+    pas = pas[~pas["Portfoy"].str.lower().isin(_nan_vals)]
 
     if med:
         aktif_col = _col(pas, "Gunluk Medyan Aktif Sicil")
@@ -246,6 +250,8 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     sh = sheets["Sicil_Hiz"].copy()
     sh["Sicil"] = sh["Sicil"].astype(str).str.strip()
     sh["Portfoy"] = sh["Portfoy"].astype(str).str.strip()
+    sh = sh[~sh["Sicil"].str.lower().isin(_nan_vals)]
+    sh = sh[~sh["Portfoy"].str.lower().isin(_nan_vals)]
 
     hiz_col = _col(sh, "Gunluk Medyan Calisma Suresi", "Gunluk Ortalama Calisma Suresi")
     if not hiz_col:
