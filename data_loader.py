@@ -207,6 +207,21 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     if not hiz_col:
         uyarilar.append("Sicil_Hiz: hız kolonu bulunamadı.")
 
+    # Aykırı değer filtresi: yalnızca fiziksel sınırlar.
+    # Üst sınır: GUN_SN — bir kişi net iş günü kapasitesini aşamaz (sistem hatası).
+    # Alt sınır: 0 — negatif veya sıfır değerler geçersiz.
+    if hiz_col and not sh.empty:
+        sure_vals = pd.to_numeric(sh[hiz_col], errors="coerce")
+        mask = (sure_vals > 0) & (sure_vals <= GUN_SN) & sure_vals.notna()
+        onceki = len(sh)
+        sh = sh[mask]
+        cikarilan = onceki - len(sh)
+        if cikarilan > 0:
+            uyarilar.append(
+                f"Sicil_Hiz: {cikarilan} aykırı çalışma süresi satırı dışlandı "
+                f"(kabul aralığı: >0–{GUN_SN} sn)."
+            )
+
     # (sicil, portfoy) → gerçek günlük çalışma süresi
     sicil_portfoy_sure: dict[tuple, float] = {}
     if hiz_col:
