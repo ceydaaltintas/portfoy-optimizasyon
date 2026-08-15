@@ -42,10 +42,14 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     if hatalar:
         return {}, uyarilar, hatalar
 
-    ma["Sicil"] = ma["Sicil"].astype(str).str.strip()
-    ma["Portfoy"] = ma["Portfoy"].astype(str).str.strip()
+    def _cs(series):
+        """fillna → str → strip: boş hücreler '' olur, asla 'nan' olmaz."""
+        return series.fillna("").astype(str).str.strip()
+
+    ma["Sicil"] = _cs(ma["Sicil"])
+    ma["Portfoy"] = _cs(ma["Portfoy"])
     ma["Portfoy Seviyesi"] = (
-        ma["Portfoy Seviyesi"].astype(str).str.strip()
+        _cs(ma["Portfoy Seviyesi"])
         .replace({"1": "ANA", "5": "DESTEK", "2": "GECİCİ"})
         .str.upper()
     )
@@ -53,9 +57,8 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         if c not in ma.columns:
             ma[c] = ""
 
-    _nan_vals = {"nan", "none", ""}
-    ma = ma[~ma["Sicil"].str.lower().isin(_nan_vals)]
-    ma = ma[~ma["Portfoy"].str.lower().isin(_nan_vals)]
+    ma = ma[ma["Sicil"] != ""]
+    ma = ma[ma["Portfoy"] != ""]
 
     tum_siciller = sorted(ma["Sicil"].unique().tolist())
     tum_portfoyler = sorted(ma["Portfoy"].unique().tolist())
@@ -113,21 +116,19 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     istisna_set: set[tuple] = set()
     istisna_sicil: set[str] = set()
     if not ist.empty and "Sicil" in ist.columns:
-        ist["Sicil"] = ist["Sicil"].astype(str).str.strip()
-        ist = ist[~ist["Sicil"].str.lower().isin(_nan_vals)]
+        ist["Sicil"] = _cs(ist["Sicil"])
+        ist = ist[ist["Sicil"] != ""]
         if "Portfoy" in ist.columns:
-            ist["Portfoy"] = ist["Portfoy"].astype(str).str.strip()
-            # Portfoy boş → sicili tamamen dışla
-            for _, row in ist[ist["Portfoy"].str.lower().isin(_nan_vals)].iterrows():
-                istisna_sicil.add(row["Sicil"])
-            # Portfoy dolu → çift istisna
-            for _, row in ist[~ist["Portfoy"].str.lower().isin(_nan_vals)].iterrows():
+            ist["Portfoy"] = _cs(ist["Portfoy"])
+            for _, row in ist.iterrows():
                 pf, s = row["Portfoy"], row["Sicil"]
-                istisna_set.add((s, pf))
-                if pf not in tum_portfoyler:
-                    uyarilar.append(f"İstisna: Portföy '{pf}' Mevcut_Atama'da yok.")
+                if not pf:
+                    istisna_sicil.add(s)
+                else:
+                    istisna_set.add((s, pf))
+                    if pf not in tum_portfoyler:
+                        uyarilar.append(f"İstisna: Portföy '{pf}' Mevcut_Atama'da yok.")
         else:
-            # Sadece Sicil kolonu varsa tüm satırlar sicil istisnası
             for s in ist["Sicil"].unique():
                 istisna_sicil.add(s)
 
@@ -137,11 +138,11 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
 
     # ── Portfoy_Is_Yuku ───────────────────────────────────────────────────────
     piy = sheets["Portfoy_Is_Yuku"].copy()
-    piy["Portfoy"] = piy["Portfoy"].astype(str).str.strip()
+    piy["Portfoy"] = _cs(piy["Portfoy"])
+    piy = piy[piy["Portfoy"] != ""]
 
     # Portfoy_Is_Yuku'daki yeni portföyleri ic_pf'e ekle (Mevcut_Atama'da olmasa bile)
-    piy_portfoyler = [str(p).strip() for p in piy["Portfoy"].dropna().unique()
-                      if str(p).strip().lower() not in ("nan", "none", "")]
+    piy_portfoyler = [p for p in piy["Portfoy"].unique() if p]
     for pf in piy_portfoyler:
         if pf not in tum_portfoyler:
             tum_portfoyler.append(pf)
@@ -156,8 +157,6 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         om_ref_col = _col(piy, "Gunluk Ortalama OM`ye Yonlendirilen Referans Adedi")
         om_disi_col = _col(piy, "Gunluk Ortalama OM`ye Yonlendirilmeyen Islem Adedi")
 
-    piy = piy[~piy["Portfoy"].str.lower().isin(_nan_vals)]
-
     om_ref_adedi: dict[str, float] = {}
     om_disi_islem_adedi: dict[str, float] = {}
     for _, row in piy.iterrows():
@@ -167,8 +166,8 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
 
     # ── Portfoy_Aktif_Sicil ───────────────────────────────────────────────────
     pas = sheets["Portfoy_Aktif_Sicil"].copy()
-    pas["Portfoy"] = pas["Portfoy"].astype(str).str.strip()
-    pas = pas[~pas["Portfoy"].str.lower().isin(_nan_vals)]
+    pas["Portfoy"] = _cs(pas["Portfoy"])
+    pas = pas[pas["Portfoy"] != ""]
 
     if med:
         aktif_col = _col(pas, "Gunluk Medyan Aktif Sicil")
@@ -247,10 +246,9 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
 
     # ── Sicil_Hiz ─────────────────────────────────────────────────────────────
     sh = sheets["Sicil_Hiz"].copy()
-    sh["Sicil"] = sh["Sicil"].astype(str).str.strip()
-    sh["Portfoy"] = sh["Portfoy"].astype(str).str.strip()
-    sh = sh[~sh["Sicil"].str.lower().isin(_nan_vals)]
-    sh = sh[~sh["Portfoy"].str.lower().isin(_nan_vals)]
+    sh["Sicil"] = _cs(sh["Sicil"])
+    sh["Portfoy"] = _cs(sh["Portfoy"])
+    sh = sh[(sh["Sicil"] != "") & (sh["Portfoy"] != "")]
 
     hiz_col = _col(sh, "Gunluk Medyan Calisma Suresi", "Gunluk Ortalama Calisma Suresi")
     if not hiz_col:
