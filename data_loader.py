@@ -219,13 +219,40 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     max_speed = max(speed_raw.values()) if speed_raw else 1.0
     speed_norm: dict[str, float] = {s: speed_raw[s] / max_speed for s in tum_siciller}
 
-    # ── Eligible set ──────────────────────────────────────────────────────────
+    # ── Sicil toplam günlük çalışma süresi ───────────────────────────────────
+    sicil_toplam_sure: dict[str, float] = {}
+    for u in tum_siciller:
+        sicil_toplam_sure[u] = sum(
+            v for (s, pf), v in sicil_portfoy_sure.items() if s == u
+        )
+        if sicil_toplam_sure[u] == 0 and u in speed_raw:
+            sicil_toplam_sure[u] = speed_raw[u]
+
+    # ── Portföy bazında ortalama DESTEK katkısı (yeni çiftler için fallback) ─
+    destek_df_rows = ma[ma["Portfoy Seviyesi"] == "DESTEK"]
+    destek_sure_vals: dict[str, list] = {pf: [] for pf in ic_pf}
+    for _, row in destek_df_rows.iterrows():
+        pf = row["Portfoy"]
+        s = row["Sicil"]
+        if pf in destek_sure_vals and (s, pf) in sicil_portfoy_sure:
+            destek_sure_vals[pf].append(sicil_portfoy_sure[(s, pf)])
+    portfoy_destek_avg: dict[str, float] = {}
+    global_destek_avg = 0.0
+    all_destek_vals = [v for vals in destek_sure_vals.values() for v in vals]
+    if all_destek_vals:
+        global_destek_avg = sum(all_destek_vals) / len(all_destek_vals)
+    for pf in ic_pf:
+        if destek_sure_vals[pf]:
+            portfoy_destek_avg[pf] = sum(destek_sure_vals[pf]) / len(destek_sure_vals[pf])
+        else:
+            portfoy_destek_avg[pf] = global_destek_avg
+
+    # ── Eligible set: tüm (sicil × iç portföy), yalnızca istisna çıkar ──────
     eligible: set[tuple] = set()
-    for _, row in ma.iterrows():
-        if row["Portfoy Seviyesi"] in ("ANA", "DESTEK") and row["Portfoy"] in ic_pf:
-            pair = (row["Sicil"], row["Portfoy"])
-            if pair not in istisna_set:
-                eligible.add(pair)
+    for u in tum_siciller:
+        for pf in ic_pf:
+            if (u, pf) not in istisna_set:
+                eligible.add((u, pf))
 
     # Talep toleransı
     if tolerans_pct > 0:
@@ -248,4 +275,6 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         "portfoy_aktif": portfoy_aktif,
         "portfoy_sicil_sure": portfoy_sicil_sure,
         "sicil_portfoy_sure": sicil_portfoy_sure,
+        "sicil_toplam_sure": sicil_toplam_sure,
+        "portfoy_destek_avg": portfoy_destek_avg,
     }, uyarilar, hatalar

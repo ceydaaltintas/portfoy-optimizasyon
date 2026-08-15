@@ -3,7 +3,6 @@ from typing import Any
 import pulp
 
 
-
 def optimize(
     data: dict,
     ana_sabit: bool = True,
@@ -22,8 +21,11 @@ def optimize(
     eligible: set[tuple] = data["eligible"]
     ana_atama_mevcut: dict[str, str] = data["ana_atama_mevcut"]
     sicil_portfoy_sure: dict[tuple, float] = data.get("sicil_portfoy_sure", {})
+    portfoy_sicil_sure: dict[str, float] = data.get("portfoy_sicil_sure", {})
+    sicil_toplam_sure: dict[str, float] = data.get("sicil_toplam_sure", {})
+    portfoy_destek_avg: dict[str, float] = data.get("portfoy_destek_avg", {})
 
-    solver = pulp.PULP_CBC_CMD(msg=0)
+    solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=30)
 
     # ── ANA KATMANI ───────────────────────────────────────────────────────────
     if ana_sabit:
@@ -51,14 +53,11 @@ def optimize(
             if pf_elig:
                 model_ana += pulp.lpSum(a[ud] for ud in pf_elig) >= 1
                 dem = demand.get(pf, 1.0)
-                if dem > 0:
-                    cap_sum = pulp.lpSum(
-                        sicil_portfoy_sure.get((u2, p2), 0.0) * a[(u2, p2)]
-                        for (u2, p2) in pf_elig
-                    )
+                contrib = portfoy_sicil_sure.get(pf, 0.0)
+                if dem > 0 and contrib > 0:
+                    cap_sum = contrib * pulp.lpSum(a[(u2, p2)] for (u2, p2) in pf_elig)
                     model_ana += Z_ana <= cap_sum / dem
 
-        # Mevcut ANA atamalarını koruma bonusu
         mevcut_ana_set = {(u, p) for u, p in ana_atama_mevcut.items()}
         n_mevcut = max(len(mevcut_ana_set), 1)
         tercih_bonus = pulp.lpSum(
@@ -77,11 +76,15 @@ def optimize(
             if pulp.value(a[(u, pf)]) is not None and pulp.value(a[(u, pf)]) > 0.5:
                 ana_atama[u] = pf
 
-    # ANA kapasite — sicilinin o portföyde gerçekte harcadığı günlük süre
+    # ANA kapasite — portföy başına ANA sicillerin toplam katkısı
+    # Gerçek Sicil_Hiz verisi varsa onu kullan, yoksa portföy ortalamasını
     ana_kapasite: dict[str, float] = {pf: 0.0 for pf in ic_pf}
+    ana_katkisi: dict[str, float] = {}  # sicil başına ANA'ya giden süre
     for u, pf in ana_atama.items():
+        contrib = sicil_portfoy_sure.get((u, pf), portfoy_sicil_sure.get(pf, 0.0))
+        ana_katkisi[u] = contrib
         if pf in ana_kapasite:
-            ana_kapasite[pf] += sicil_portfoy_sure.get((u, pf), 0.0)
+            ana_kapasite[pf] += contrib
 
     ana_set: set[tuple] = {(u, pf) for u, pf in ana_atama.items()}
 
@@ -91,20 +94,27 @@ def optimize(
         if dem > 0:
             ratio = ana_kapasite[pf] / dem
             if ratio > 1.5:
-                uyarilar.append(f"Portföy '{pf}': ANA kapasite talepten %{int((ratio-1)*100)} fazla — ANA sicil sayısı yüksek olabilir.")
+                uyarilar.append(f"Portföy '{pf}': ANA kapasite talepten %{int((ratio-1)*100)} fazla.")
             elif ratio < 0.5:
                 uyarilar.append(f"Portföy '{pf}': ANA kapasite talebin yalnızca %{int(ratio*100)}'ini karşılıyor.")
+
+    # ── Sicil DESTEK kapasitesi ───────────────────────────────────────────────
+    # Sicilin toplam süresi − ANA'ya giden pay, teorik üst sınırı aşamaz
+    destek_available: dict[str, float] = {}
+    for u in tum_siciller:
+        toplam = sicil_toplam_sure.get(u, 0.0)
+        ana_pay = ana_katkisi.get(u, 0.0)
+        teorik = capacity.get(u, 0.0)
+        destek_available[u] = min(max(toplam - ana_pay, 0.0), teorik)
 
     # ── DESTEK KATMANI ────────────────────────────────────────────────────────
     destek_elig = [(u, pf) for (u, pf) in eligible if pf in ic_pf and (u, pf) not in ana_set]
 
-    # Portföy başı min ayarı
     eff_min: dict[str, int] = {}
     for pf in ic_pf:
         n_cand = sum(1 for (u2, p2) in destek_elig if p2 == pf)
         if n_cand < min_destek_sicil:
-            if n_cand < min_destek_sicil:
-                uyarilar.append(f"Portföy '{pf}': Min. DESTEK {min_destek_sicil} → sadece {n_cand} aday var, sınır düşürüldü.")
+            uyarilar.append(f"Portföy '{pf}': Min. DESTEK {min_destek_sicil} → sadece {n_cand} aday var, sınır düşürüldü.")
             eff_min[pf] = n_cand
         else:
             eff_min[pf] = min_destek_sicil
@@ -124,30 +134,44 @@ def optimize(
     y = {(u, pf): pulp.LpVariable(f"y_{u}_{pf}", cat="Binary") for (u, pf) in destek_elig}
     Z_d = pulp.LpVariable("Z_d", lowBound=0, upBound=1)
 
+    # Sicil başına DESTEK portföy sayısı sınırı
     for u in tum_siciller:
         u_list = [(u2, p2) for (u2, p2) in destek_elig if u2 == u]
         if u_list:
             model_d += pulp.lpSum(y[ud] for ud in u_list) <= max_destek_portfoy
 
+    # Her (sicil, portföy) çifti için DESTEK katkısı:
+    # Geçmiş veri varsa gerçek süreyi kullan, yoksa portföyün ortalama DESTEK katkısını kullan
+    def destek_katkisi(u, pf):
+        return sicil_portfoy_sure.get((u, pf), portfoy_destek_avg.get(pf, 0.0))
+
+    # Sicil kapasitesi: atanan portföylerin DESTEK katkıları toplamı ≤ sicilin kullanılabilir DESTEK süresi
+    for u in tum_siciller:
+        u_list = [(u2, p2) for (u2, p2) in destek_elig if u2 == u]
+        if u_list and destek_available.get(u, 0) > 0:
+            model_d += pulp.lpSum(
+                destek_katkisi(u2, p2) * y[(u2, p2)]
+                for (u2, p2) in u_list
+            ) <= destek_available[u]
+
+    # Portföy başına sicil sayısı ve kapsama kısıtı
     for pf in ic_pf:
         pf_list = [(u2, p2) for (u2, p2) in destek_elig if p2 == pf]
         if pf_list:
             if eff_min[pf] > 0:
                 model_d += pulp.lpSum(y[ud] for ud in pf_list) >= eff_min[pf]
             model_d += pulp.lpSum(y[ud] for ud in pf_list) <= max_destek_sicil
+
         dem = demand.get(pf, 1.0)
         if dem > 0 and pf_list:
             destek_cap = pulp.lpSum(
-                sicil_portfoy_sure.get((u2, p2), 0.0) * y[(u2, p2)]
+                destek_katkisi(u2, p2) * y[(u2, p2)]
                 for (u2, p2) in pf_list
             )
             model_d += Z_d <= (ana_kapasite.get(pf, 0) + destek_cap) / dem
 
-    # Hız dengesi: her portföydeki atanan sicillerin hız toplamı,
-    # global ortalama × atanan sicil sayısına yakın olsun.
-    # |Σ SPEED_NORM[u]*y[u,p] - global_ort * Σ y[u,p]| minimize → sapma değişkenleriyle doğrusallaştır.
+    # Hız dengesi
     global_speed = sum(speed_norm.values()) / max(len(speed_norm), 1)
-
     sapma_pos = {pf: pulp.LpVariable(f"sp_pos_{pf}", lowBound=0) for pf in ic_pf}
     sapma_neg = {pf: pulp.LpVariable(f"sp_neg_{pf}", lowBound=0) for pf in ic_pf}
 
@@ -156,7 +180,6 @@ def optimize(
         if pf_list:
             hiz_toplam = pulp.lpSum(speed_norm.get(u2, global_speed) * y[(u2, p2)] for (u2, p2) in pf_list)
             hedef = global_speed * pulp.lpSum(y[(u2, p2)] for (u2, p2) in pf_list)
-            # hiz_toplam - hedef = sapma_pos - sapma_neg
             model_d += hiz_toplam - hedef == sapma_pos[pf] - sapma_neg[pf]
 
     n_pf = max(len(ic_pf), 1)
@@ -176,7 +199,7 @@ def optimize(
 
     destek_kapasite: dict[str, float] = {pf: 0.0 for pf in ic_pf}
     for u, pf in destek_atama:
-        destek_kapasite[pf] += sicil_portfoy_sure.get((u, pf), 0.0)
+        destek_kapasite[pf] += destek_katkisi(u, pf)
 
     coverage = _coverage(ic_pf, ana_kapasite, destek_kapasite, demand)
 

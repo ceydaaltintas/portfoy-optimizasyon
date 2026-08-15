@@ -66,53 +66,84 @@ def create_sample(path: str = "sample_data/ornek_veri.xlsx"):
     sheet2 = pd.DataFrame(rows2)
 
     # Sheet 3: Sicil_Hiz
-    sicil_baz = {s: random.randint(20000, 30000) for s in SICILLER}
+    # Her sicil için toplam günlük kapasite belirlenir, portföylere bölüştürülür
+    sicil_toplam = {s: random.randint(20000, 29000) for s in SICILLER}
     rows3 = []
-    for _, row in sheet1.iterrows():
-        sicil, pf = row["Sicil"], row["Portfoy"]
-        if row["Portfoy Seviyesi"] == "GECİCİ":
-            continue
-        baz = sicil_baz[sicil]
-        gun = random.randint(15, 22)
-        ort_cal = int(baz * random.uniform(0.92, 1.08))
-        om_ref_sure = random.randint(400, 900)
-        om_disi_sure = random.randint(800, 2000)
-        ref_ort = random.randint(30, 120)
-        rows3.append({
-            "Portfoy": pf,
-            "Sicil": sicil,
-            "Calistigi Is Gunu Sayisi": gun,
-            "Gunluk Ortalama Calisma Suresi": ort_cal,
-            "Gunluk Medyan Calisma Suresi": int(ort_cal * random.uniform(0.88, 0.97)),
-            "Gunluk Ortalama OM`ye yönlendirilen referanslarda calışma suresi": om_ref_sure,
-            "Gunluk Medyan OM`ye yönlendirilen referanslarda calışma suresi": int(om_ref_sure * random.uniform(0.87, 0.96)),
-            "Gunluk Ortalama OM`ye yönlendirilmeyen referanslarda calışma suresi": om_disi_sure,
-            "Gunluk Medyan OM`ye yönlendirilmeyen referanslarda calışma suresi": int(om_disi_sure * random.uniform(0.87, 0.96)),
-            "Gunluk Ortalama Referans Adedi": ref_ort,
-            "Gunluk Medyan Referans Adedi": int(ref_ort * random.uniform(0.88, 0.96)),
-        })
+    for sicil in SICILLER:
+        toplam = sicil_toplam[sicil]
+        sicil_rows = sheet1[sheet1["Sicil"] == sicil]
+        ic_rows = sicil_rows[sicil_rows["Portfoy Seviyesi"].isin(["ANA", "DESTEK"])]
+        pf_listesi = ic_rows["Portfoy"].tolist()
+        seviyeler = {r["Portfoy"]: r["Portfoy Seviyesi"] for _, r in ic_rows.iterrows()}
+
+        # ANA portföy toplam sürenin %55-75'ini alır, DESTEK'ler kalanı paylaşır
+        ana_pf = next((p for p, s in seviyeler.items() if s == "ANA"), None)
+        destek_pf = [p for p, s in seviyeler.items() if s == "DESTEK"]
+        if ana_pf:
+            ana_pay = int(toplam * random.uniform(0.55, 0.75))
+            kalan = toplam - ana_pay
+            pf_sureler = {ana_pf: ana_pay}
+            if destek_pf:
+                agirliklar = [random.uniform(0.5, 1.5) for _ in destek_pf]
+                toplam_agirlik = sum(agirliklar)
+                for pf, ag in zip(destek_pf, agirliklar):
+                    pf_sureler[pf] = int(kalan * ag / toplam_agirlik)
+        else:
+            esit = toplam // max(len(pf_listesi), 1)
+            pf_sureler = {pf: esit for pf in pf_listesi}
+
+        for pf in pf_listesi:
+            cal = pf_sureler.get(pf, 0)
+            om_oran = random.uniform(0.50, 0.75)
+            om_ref_sure = int(cal * om_oran)
+            om_disi_sure = cal - om_ref_sure
+            ref_ort = random.randint(20, 80)
+            gun = random.randint(15, 22)
+            rows3.append({
+                "Portfoy": pf,
+                "Sicil": sicil,
+                "Calistigi Is Gunu Sayisi": gun,
+                "Gunluk Ortalama Calisma Suresi": cal,
+                "Gunluk Medyan Calisma Suresi": int(cal * random.uniform(0.88, 0.97)),
+                "Gunluk Ortalama OM`ye yönlendirilen referanslarda calışma suresi": om_ref_sure,
+                "Gunluk Medyan OM`ye yönlendirilen referanslarda calışma suresi": int(om_ref_sure * random.uniform(0.87, 0.96)),
+                "Gunluk Ortalama OM`ye yönlendirilmeyen referanslarda calışma suresi": om_disi_sure,
+                "Gunluk Medyan OM`ye yönlendirilmeyen referanslarda calışma suresi": int(om_disi_sure * random.uniform(0.87, 0.96)),
+                "Gunluk Ortalama Referans Adedi": ref_ort,
+                "Gunluk Medyan Referans Adedi": int(ref_ort * random.uniform(0.88, 0.96)),
+            })
     sheet3 = pd.DataFrame(rows3)
 
     # Sheet 4: Portfoy_Aktif_Sicil
+    # portfoy_sicil_sure değerlerini Sicil_Hiz'den türet (tutarlılık için)
     rows4 = []
     for pf in TUM_PORTFOYLER:
+        pf_hiz = sheet3[sheet3["Portfoy"] == pf]
         n = sheet1[sheet1["Portfoy"] == pf]["Sicil"].nunique()
-        # Günlük toplam çalışma süresi per sicil (sn/gün)
-        ort_cal = random.randint(20000, 29000)
-        # OM oranı: toplam sürenin %40–70'i OM işlerine harcanıyor (günlük toplam, sn/gün/sicil)
-        om_oran = random.uniform(0.40, 0.70)
-        om_ref_sure = int(ort_cal * om_oran)       # günlük OM çalışma süresi per sicil
-        om_disi_sure = int(ort_cal * (1 - om_oran))  # günlük OM dışı çalışma süresi per sicil
+        if not pf_hiz.empty:
+            ort_cal = int(pf_hiz["Gunluk Ortalama Calisma Suresi"].mean())
+            med_cal = int(pf_hiz["Gunluk Medyan Calisma Suresi"].mean())
+            om_sure = int(pf_hiz["Gunluk Ortalama OM`ye yönlendirilen referanslarda calışma suresi"].mean())
+            om_sure_med = int(pf_hiz["Gunluk Medyan OM`ye yönlendirilen referanslarda calışma suresi"].mean())
+            disi_sure = int(pf_hiz["Gunluk Ortalama OM`ye yönlendirilmeyen referanslarda calışma suresi"].mean())
+            disi_sure_med = int(pf_hiz["Gunluk Medyan OM`ye yönlendirilmeyen referanslarda calışma suresi"].mean())
+        else:
+            ort_cal = random.randint(3000, 8000)
+            med_cal = int(ort_cal * 0.92)
+            om_sure = int(ort_cal * 0.6)
+            om_sure_med = int(om_sure * 0.92)
+            disi_sure = ort_cal - om_sure
+            disi_sure_med = int(disi_sure * 0.92)
         rows4.append({
             "Portfoy": pf,
             "Gunluk Ortalama Aktif Sicil": round(n * random.uniform(0.80, 1.0), 1),
             "Gunluk Medyan Aktif Sicil": max(1, n - random.randint(0, 2)),
             "Sicil bazlı günlük ortalama çalışma süresi": ort_cal,
-            "Sicil bazlı günlük medyan çalışma süresi": int(ort_cal * random.uniform(0.88, 0.97)),
-            "Sicil bazlı günlük ortalama OM`ye yonlendırılen referanslarda çalışma süresi": om_ref_sure,
-            "Sicil bazlı günlük medyan OM`ye yonlendırılen referanslarda çalışma süresi": int(om_ref_sure * random.uniform(0.87, 0.96)),
-            "Sicil bazlı günlük ortalama OM`ye yonlendırılmeyen referanslarda çalışma süresi": om_disi_sure,
-            "Sicil bazlı günlük medyan OM`ye yonlendırılmeyen referanslarda çalışma süresi": int(om_disi_sure * random.uniform(0.87, 0.96)),
+            "Sicil bazlı günlük medyan çalışma süresi": med_cal,
+            "Sicil bazlı günlük ortalama OM`ye yonlendırılen referanslarda çalışma süresi": om_sure,
+            "Sicil bazlı günlük medyan OM`ye yonlendırılen referanslarda çalışma süresi": om_sure_med,
+            "Sicil bazlı günlük ortalama OM`ye yonlendırılmeyen referanslarda çalışma süresi": disi_sure,
+            "Sicil bazlı günlük medyan OM`ye yonlendırılmeyen referanslarda çalışma süresi": disi_sure_med,
         })
     sheet4 = pd.DataFrame(rows4)
 
