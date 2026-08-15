@@ -178,21 +178,25 @@ def optimize(
             )
             model_d += Z_d <= toplam_kap / dem
 
-    # Hız dengesi (atama bazlı)
-    global_speed = sum(speed_norm.values()) / max(len(speed_norm), 1)
-    sapma_pos = {pf: pulp.LpVariable(f"sp_pos_{pf}", lowBound=0) for pf in ic_pf}
-    sapma_neg = {pf: pulp.LpVariable(f"sp_neg_{pf}", lowBound=0) for pf in ic_pf}
+    # Hız dengesi: her portföyde hızlı/yavaş sicil sayısı dengeli olsun
+    # Sicilleri medyana göre hızlı (1) ve yavaş (0) olarak ikiye böl
+    speeds = sorted(speed_norm.values())
+    medyan_hiz = speeds[len(speeds) // 2] if speeds else 0.5
+    hizli = {u for u, s in speed_norm.items() if s >= medyan_hiz}
+    # Hızlı/yavaş farkı portföy başına minimize edilir
+    fark_pos = {pf: pulp.LpVariable(f"fark_pos_{pf}", lowBound=0) for pf in ic_pf}
+    fark_neg = {pf: pulp.LpVariable(f"fark_neg_{pf}", lowBound=0) for pf in ic_pf}
 
     for pf in ic_pf:
         pf_list = [(u2, p2) for (u2, p2) in destek_elig if p2 == pf]
         if pf_list:
-            hiz_toplam = pulp.lpSum(speed_norm.get(u2, global_speed) * y[(u2, p2)] for (u2, p2) in pf_list)
-            hedef = global_speed * pulp.lpSum(y[(u2, p2)] for (u2, p2) in pf_list)
-            model_d += sapma_pos[pf] >= hiz_toplam - hedef
-            model_d += sapma_neg[pf] >= hedef - hiz_toplam
+            n_hizli = pulp.lpSum(y[(u2, p2)] for (u2, p2) in pf_list if u2 in hizli)
+            n_yavas = pulp.lpSum(y[(u2, p2)] for (u2, p2) in pf_list if u2 not in hizli)
+            model_d += fark_pos[pf] >= n_hizli - n_yavas
+            model_d += fark_neg[pf] >= n_yavas - n_hizli
 
     n_pf = max(len(ic_pf), 1)
-    hiz_dengesi_penalty = pulp.lpSum(sapma_pos[pf] + sapma_neg[pf] for pf in ic_pf) / n_pf
+    hiz_dengesi_penalty = pulp.lpSum(fark_pos[pf] + fark_neg[pf] for pf in ic_pf) / n_pf
 
     model_d += hiz_agirlik * Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty
     model_d.solve(solver)
