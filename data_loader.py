@@ -338,25 +338,29 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     if "Havuzda_Bekleme" in sheets:
         hb = sheets["Havuzda_Bekleme"].copy()
         hb.columns = [str(c).strip() for c in hb.columns]
-        if "Portfoy" in hb.columns and "Gelen_Ref" in hb.columns and "Ayni_Saatte_Baslanan" in hb.columns:
+        if "Portfoy" in hb.columns and "Tarih" in hb.columns and "Gelen_Ref" in hb.columns and "Ayni_Saatte_Baslanan" in hb.columns:
             hb["Portfoy"] = _cs(hb["Portfoy"])
             hb = hb[hb["Portfoy"] != ""]
             hb["Gelen_Ref"] = pd.to_numeric(hb["Gelen_Ref"], errors="coerce").fillna(0)
             hb["Ayni_Saatte_Baslanan"] = pd.to_numeric(hb["Ayni_Saatte_Baslanan"], errors="coerce").fillna(0)
+            hb["Tarih"] = pd.to_datetime(hb["Tarih"], dayfirst=True, errors="coerce")
+            hb = hb[hb["Tarih"].notna()]
             if not hb.empty:
-                # Portföy bazında ağırlıklı bekleyen oran: Σ(gelen - baslanan) / Σ(gelen)
-                grp = hb.groupby("Portfoy").agg(
-                    toplam_gelen=("Gelen_Ref", "sum"),
-                    toplam_baslanan=("Ayni_Saatte_Baslanan", "sum"),
+                # Her (Portfoy, Tarih) için günlük toplam → günlük bekleyen oran
+                gun_grp = hb.groupby(["Portfoy", "Tarih"]).agg(
+                    gun_gelen=("Gelen_Ref", "sum"),
+                    gun_baslanan=("Ayni_Saatte_Baslanan", "sum"),
                 ).reset_index()
-                grp = grp[grp["toplam_gelen"] > 0]
-                grp["bekleyen_oran"] = (grp["toplam_gelen"] - grp["toplam_baslanan"]) / grp["toplam_gelen"]
-                grp["bekleyen_oran"] = grp["bekleyen_oran"].clip(lower=0)
+                gun_grp = gun_grp[gun_grp["gun_gelen"] > 0]
+                gun_grp["bekleyen_oran"] = (
+                    (gun_grp["gun_gelen"] - gun_grp["gun_baslanan"]) / gun_grp["gun_gelen"]
+                ).clip(lower=0)
+                # Portföy bazında günlük oranların medyanı
+                grp = gun_grp.groupby("Portfoy")["bekleyen_oran"].median().reset_index()
                 medyan_oran = grp["bekleyen_oran"].median()
                 if medyan_oran > 0:
                     for _, row in grp.iterrows():
                         pf = row["Portfoy"]
-                        # Katsayı: medyan üzerindeyse talep şişer, altındaysa dokunulmaz
                         kat = row["bekleyen_oran"] / medyan_oran
                         bekleme_katsayisi[pf] = max(1.0, kat)
                 if bekleme_katsayisi:
