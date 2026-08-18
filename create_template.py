@@ -70,6 +70,19 @@ SHEETS = {
         "cols": ["Sicil", "Portfoy"],
         "note": "İki kullanım: (1) Sicil + Portfoy dolu → o çifte hiç atama yapılmaz. (2) Sadece Sicil dolu, Portfoy boş → o sicil optimizasyondan tamamen dışlanır.",
     },
+    "Havuzda_Bekleme": {
+        "cols": [
+            "Portfoy",
+            "Tarih",
+            "Saat",
+            "Gelen_Ref",
+            "Ayni_Saatte_Baslanan",
+            "Ort_Ilk_Temas_Sn",
+            "Toplam_Calisilan_Ref",
+            "Aktif_Sicil_Adedi",
+        ],
+        "note": "OPSİYONEL. Son 5 iş günü saatlik portföy verisi. Doldurulursa yoğun portföylerin talebi otomatik şişirilir. Tarih: YYYY-MM-DD, Saat: HH:MM, süreler saniye cinsinden.",
+    },
 }
 
 
