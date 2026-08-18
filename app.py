@@ -11,12 +11,10 @@ from create_template import create_template
 
 SAMPLE_PATH = "sample_data/ornek_veri.xlsx"
 TEMPLATE_PATH = "sample_data/sablon.xlsx"
+os.makedirs("sample_data", exist_ok=True)
 if not os.path.exists(SAMPLE_PATH):
-    os.makedirs("sample_data", exist_ok=True)
     create_sample(SAMPLE_PATH)
-if not os.path.exists(TEMPLATE_PATH):
-    os.makedirs("sample_data", exist_ok=True)
-    create_template(TEMPLATE_PATH)
+create_template(TEMPLATE_PATH)
 
 st.set_page_config(
     page_title="Portföy Destek Optimizasyonu",
