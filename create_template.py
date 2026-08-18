@@ -81,7 +81,7 @@ SHEETS = {
             "Toplam_Calisilan_Ref",
             "Aktif_Sicil_Adedi",
         ],
-        "note": "OPSİYONEL. Son 5 iş günü saatlik portföy verisi. Doldurulursa yoğun portföylerin talebi otomatik şişirilir. Tarih: YYYY-MM-DD, Saat: HH:MM, süreler saniye cinsinden.",
+        "note": "OPSİYONEL. Saatlik portföy bekleme verisi (örn. son 1 ay). Doldurulursa yoğun portföylerin talebi otomatik şişirilir. Tarih: YYYY-MM-DD, Saat: HH:MM, süreler saniye cinsinden.",
     },
 }
 

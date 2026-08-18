@@ -172,7 +172,7 @@ def create_sample(path: str = "sample_data/ornek_veri.xlsx"):
     bugun = datetime.date.today()
     is_gunleri = []
     d = bugun
-    while len(is_gunleri) < 5:
+    while len(is_gunleri) < 22:
         if d.weekday() < 5:
             is_gunleri.append(d)
         d -= datetime.timedelta(days=1)
