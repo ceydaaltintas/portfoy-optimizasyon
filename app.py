@@ -222,10 +222,10 @@ with st.expander("Gelişmiş Ayarlar (opsiyonel)", expanded=False):
         0.0, 1.0, 0.5, 0.05,
         help="0 = yalnızca kapasite karşılama, 1 = yalnızca hız dengesi",
     )
-    col_a, col_b, col_c = st.columns(3)
-    min_destek = col_a.number_input("Portföy başına min. DESTEK sicil", 0, 20, 0)
+    col_b, col_c = st.columns(2)
     max_destek = col_b.number_input("Portföy başına maks. DESTEK sicil", 1, 50, 10)
     max_portfoy = col_c.number_input("Sicil başına maks. DESTEK portföy", 1, 20, 5)
+    min_destek = 0
 
 st.caption("Gelişmiş ayarlar varsayılan değerleriyle kullanılacaktır. Değiştirmek isterseniz genişletin.")
 submitted = st.button("Optimize Et", type="primary", use_container_width=True)
