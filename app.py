@@ -39,7 +39,9 @@ st.caption("Talimat yönetim sistemi — portföy destek ataması optimizasyon a
 # ── 1. VERİ YÜKLEME ───────────────────────────────────────────────────────────
 st.header("1. Veri Yükleme")
 
-SHEET_NAMES = ["Mevcut_Atama", "Portfoy_Is_Yuku", "Sicil_Hiz", "Portfoy_Aktif_Sicil", "Istisna"]
+SHEET_NAMES_REQUIRED = ["Mevcut_Atama", "Portfoy_Is_Yuku", "Sicil_Hiz", "Portfoy_Aktif_Sicil", "Istisna"]
+SHEET_NAMES_OPTIONAL = ["Havuzda_Bekleme"]
+SHEET_NAMES = SHEET_NAMES_REQUIRED  # geriye dönük uyumluluk için
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 mod = st.radio(
@@ -52,20 +54,17 @@ raw_sheets = None
 
 if mod == "Tek Excel dosyası (.xlsx)":
     uploaded = st.file_uploader(
-        "5 sekmeli Excel dosyasını yükleyin",
+        "Excel dosyasını yükleyin",
         type=["xlsx"],
-        help="Sekmeler: Mevcut_Atama, Portfoy_Is_Yuku, Sicil_Hiz, Portfoy_Aktif_Sicil, Istisna",
+        help="Zorunlu sekmeler: Mevcut_Atama, Portfoy_Is_Yuku, Sicil_Hiz, Portfoy_Aktif_Sicil, Istisna | Opsiyonel: Havuzda_Bekleme",
     )
     if uploaded:
         try:
             xl = pd.ExcelFile(uploaded)
-            missing = [s for s in SHEET_NAMES if s not in xl.sheet_names]
+            missing = [s for s in SHEET_NAMES_REQUIRED if s not in xl.sheet_names]
             if missing:
                 st.error(f"Eksik sekme(ler): {', '.join(missing)}")
             else:
-                # Şablon formatında 1. satır açıklama notu, 2. satır başlıktır.
-                # İlk satır başlık değilse (kolon adı 50+ karakter veya "Sicil"/"Portfoy" yok)
-                # header=1 ile yeniden oku.
                 def _parse_sheet(xl, name):
                     df = xl.parse(name, header=0)
                     cols = [str(c) for c in df.columns]
@@ -73,25 +72,39 @@ if mod == "Tek Excel dosyası (.xlsx)":
                     if len(first) > 50 or not any(k in cols for k in ["Sicil", "Portfoy", "Gunluk"]):
                         df = xl.parse(name, header=1)
                     return df
-                raw_sheets = {s: _parse_sheet(xl, s) for s in SHEET_NAMES}
-                st.success("Dosya başarıyla yüklendi.")
+                raw_sheets = {s: _parse_sheet(xl, s) for s in SHEET_NAMES_REQUIRED}
+                for s in SHEET_NAMES_OPTIONAL:
+                    if s in xl.sheet_names:
+                        raw_sheets[s] = _parse_sheet(xl, s)
+                opsiyonel_yuklendi = [s for s in SHEET_NAMES_OPTIONAL if s in raw_sheets]
+                msg = "Dosya başarıyla yüklendi."
+                if opsiyonel_yuklendi:
+                    msg += f" Opsiyonel sekme(ler) de okundu: {', '.join(opsiyonel_yuklendi)}."
+                st.success(msg)
         except Exception as e:
             st.error(f"Dosya okuma hatası: {e}")
 else:
-    st.info(f"Her tablo için ayrı bir CSV yükleyin. Gerekli dosyalar: {', '.join(SHEET_NAMES)}")
+    st.info(f"Her tablo için ayrı bir CSV yükleyin. Zorunlu dosyalar: {', '.join(SHEET_NAMES_REQUIRED)} | Opsiyonel: {', '.join(SHEET_NAMES_OPTIONAL)}")
     csv_files = {}
+    st.markdown("**Zorunlu tablolar**")
     cols = st.columns(3)
-    for i, sn in enumerate(SHEET_NAMES):
+    for i, sn in enumerate(SHEET_NAMES_REQUIRED):
         with cols[i % 3]:
             f = st.file_uploader(f"{sn}.csv", type=["csv"], key=f"csv_{sn}")
             if f:
                 csv_files[sn] = pd.read_csv(f)
-    if len(csv_files) == len(SHEET_NAMES):
+    st.markdown("**Opsiyonel tablolar**")
+    for sn in SHEET_NAMES_OPTIONAL:
+        f = st.file_uploader(f"{sn}.csv (opsiyonel)", type=["csv"], key=f"csv_{sn}")
+        if f:
+            csv_files[sn] = pd.read_csv(f)
+    if all(s in csv_files for s in SHEET_NAMES_REQUIRED):
         raw_sheets = csv_files
-        st.success("Tüm CSV dosyaları başarıyla yüklendi.")
+        st.success("Zorunlu CSV dosyaları başarıyla yüklendi.")
     elif csv_files:
-        eksik = [s for s in SHEET_NAMES if s not in csv_files]
-        st.warning(f"Eksik dosyalar: {', '.join(eksik)}")
+        eksik = [s for s in SHEET_NAMES_REQUIRED if s not in csv_files]
+        if eksik:
+            st.warning(f"Eksik dosyalar: {', '.join(eksik)}")
 
 # İndirme butonları — her zaman görünür
 btn_col1, btn_col2 = st.columns(2)
