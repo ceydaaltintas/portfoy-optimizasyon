@@ -114,7 +114,7 @@ try:
             file_name="portfoy_optimizasyon_sablon.xlsx",
             mime=MIME_XLSX,
             use_container_width=True,
-            help="5 sekme, başlıklar ve kılavuz notlar dolu — kendi verinizle doldurun",
+            help="5 zorunlu + 1 opsiyonel sekme (Havuzda_Bekleme), başlıklar ve kılavuz notlar dolu — kendi verinizle doldurun",
         )
 except FileNotFoundError:
     pass
