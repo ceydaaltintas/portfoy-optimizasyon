@@ -330,6 +330,41 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         else:
             portfoy_destek_avg[pf] = global_destek_avg
 
+    # ── Havuzda_Bekleme (opsiyonel) ───────────────────────────────────────────
+    # Sheet yoksa veya boşsa hiçbir şey değişmez.
+    # Varsa: portföy bazında bekleyen oran hesaplanır, yüksek bekleyen portföylerin
+    # talebi şişirilerek optimizer daha fazla kapasite yönlendirmeye zorlanır.
+    bekleme_katsayisi: dict[str, float] = {}
+    if "Havuzda_Bekleme" in sheets:
+        hb = sheets["Havuzda_Bekleme"].copy()
+        hb.columns = [str(c).strip() for c in hb.columns]
+        if "Portfoy" in hb.columns and "Gelen_Ref" in hb.columns and "Ayni_Saatte_Baslanan" in hb.columns:
+            hb["Portfoy"] = _cs(hb["Portfoy"])
+            hb = hb[hb["Portfoy"] != ""]
+            hb["Gelen_Ref"] = pd.to_numeric(hb["Gelen_Ref"], errors="coerce").fillna(0)
+            hb["Ayni_Saatte_Baslanan"] = pd.to_numeric(hb["Ayni_Saatte_Baslanan"], errors="coerce").fillna(0)
+            if not hb.empty:
+                # Portföy bazında ağırlıklı bekleyen oran: Σ(gelen - baslanan) / Σ(gelen)
+                grp = hb.groupby("Portfoy").agg(
+                    toplam_gelen=("Gelen_Ref", "sum"),
+                    toplam_baslanan=("Ayni_Saatte_Baslanan", "sum"),
+                ).reset_index()
+                grp = grp[grp["toplam_gelen"] > 0]
+                grp["bekleyen_oran"] = (grp["toplam_gelen"] - grp["toplam_baslanan"]) / grp["toplam_gelen"]
+                grp["bekleyen_oran"] = grp["bekleyen_oran"].clip(lower=0)
+                medyan_oran = grp["bekleyen_oran"].median()
+                if medyan_oran > 0:
+                    for _, row in grp.iterrows():
+                        pf = row["Portfoy"]
+                        # Katsayı: medyan üzerindeyse talep şişer, altındaysa dokunulmaz
+                        kat = row["bekleyen_oran"] / medyan_oran
+                        bekleme_katsayisi[pf] = max(1.0, kat)
+                if bekleme_katsayisi:
+                    uyarilar.append(
+                        f"Havuzda_Bekleme verisi kullanıldı: "
+                        f"{len(bekleme_katsayisi)} portföy için talep ağırlığı ayarlandı."
+                    )
+
     # ── Talep: günlük referans adedi × referans başına süre ──────────────────
     demand: dict[str, float] = {}
     for pf in tum_portfoyler:
@@ -341,6 +376,12 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
             # fallback: aktif sicil × sicil başı süre
             aktif = max(portfoy_aktif.get(pf, 1.0), 1.0)
             demand[pf] = aktif * portfoy_sicil_sure.get(pf, 0.0)
+
+    # Havuzda_Bekleme katsayısı uygula (varsa)
+    if bekleme_katsayisi:
+        for pf in tum_portfoyler:
+            if pf in bekleme_katsayisi and bekleme_katsayisi[pf] > 1.0:
+                demand[pf] = demand[pf] * bekleme_katsayisi[pf]
 
     # Verisi olmayan iç portföyler için ortalama ile doldur
     ic_demand_vals = [demand[pf] for pf in ic_pf if demand.get(pf, 0.0) > 0]

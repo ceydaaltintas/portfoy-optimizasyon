@@ -165,12 +165,62 @@ def create_sample(path: str = "sample_data/ornek_veri.xlsx"):
             istisna_rows.append({"Sicil": sicil, "Portfoy": pf})
     sheet5 = pd.DataFrame(istisna_rows)
 
+    # Sheet 6: Havuzda_Bekleme (opsiyonel)
+    # Son 5 iş günü, saatlik kırılımda portföy bazında bekleme verisi
+    import datetime
+    rows6 = []
+    bugun = datetime.date.today()
+    is_gunleri = []
+    d = bugun
+    while len(is_gunleri) < 5:
+        if d.weekday() < 5:
+            is_gunleri.append(d)
+        d -= datetime.timedelta(days=1)
+
+    SAATLER = [f"{h:02d}:00" for h in range(9, 18)]
+    # Bazı portföyler kronik yoğun, bazıları normal — gerçekçi dağılım için
+    yogun_pf = random.sample(PORTFOYLER_IC, 4)
+
+    for tarih in is_gunleri:
+        for pf in PORTFOYLER_IC:
+            pf_row = sheet2[sheet2["Portfoy"] == pf]
+            gunluk_ref = float(pf_row["Günlük Ortalama Referans Adedi"].values[0]) if not pf_row.empty else 30.0
+            n_sicil = max(len(sheet1[
+                (sheet1["Portfoy"] == pf) &
+                (sheet1["Portfoy Seviyesi"].isin(["ANA", "DESTEK"]))
+            ]), 1)
+            yogun = pf in yogun_pf
+            for saat in SAATLER:
+                # Sabah ve öğle sonrası daha yoğun
+                saat_no = int(saat[:2])
+                saat_carpan = 1.4 if saat_no in [9, 10, 14] else 0.7 if saat_no >= 16 else 1.0
+                gelen = max(1, round(gunluk_ref / len(SAATLER) * saat_carpan * random.uniform(0.7, 1.3)))
+                # Yoğun portföylerde daha az ref aynı saatte işleme alınıyor
+                baslama_oran = random.uniform(0.45, 0.70) if yogun else random.uniform(0.70, 0.95)
+                ayni_saatte = max(0, round(gelen * baslama_oran))
+                # İlk temas bekleme süresi — yoğun portföylerde daha uzun
+                ort_bekleme = random.randint(600, 1800) if yogun else random.randint(120, 600)
+                # Toplam çalışılan ref (iade dönüşleri dahil — gelenin %10-30 fazlası)
+                toplam_calisilan = round(gelen * random.uniform(1.1, 1.3))
+                rows6.append({
+                    "Portfoy": pf,
+                    "Tarih": tarih.strftime("%Y-%m-%d"),
+                    "Saat": saat,
+                    "Gelen_Ref": gelen,
+                    "Ayni_Saatte_Baslanan": ayni_saatte,
+                    "Ort_Ilk_Temas_Sn": ort_bekleme,
+                    "Toplam_Calisilan_Ref": toplam_calisilan,
+                    "Aktif_Sicil_Adedi": max(1, round(n_sicil * random.uniform(0.6, 1.0))),
+                })
+    sheet6 = pd.DataFrame(rows6)
+
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
         sheet1.to_excel(writer, sheet_name="Mevcut_Atama", index=False)
         sheet2.to_excel(writer, sheet_name="Portfoy_Is_Yuku", index=False)
         sheet3.to_excel(writer, sheet_name="Sicil_Hiz", index=False)
         sheet4.to_excel(writer, sheet_name="Portfoy_Aktif_Sicil", index=False)
         sheet5.to_excel(writer, sheet_name="Istisna", index=False)
+        sheet6.to_excel(writer, sheet_name="Havuzda_Bekleme", index=False)
 
 
 if __name__ == "__main__":
