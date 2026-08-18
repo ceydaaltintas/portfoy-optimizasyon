@@ -204,7 +204,7 @@ def create_sample(path: str = "sample_data/ornek_veri.xlsx"):
                 toplam_calisilan = round(gelen * random.uniform(1.1, 1.3))
                 rows6.append({
                     "Portfoy": pf,
-                    "Tarih": tarih.strftime("%Y-%m-%d"),
+                    "Tarih": tarih.strftime("%d.%m.%Y"),
                     "Saat": saat,
                     "Gelen_Ref": gelen,
                     "Ayni_Saatte_Baslanan": ayni_saatte,
