@@ -362,11 +362,12 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
                 # Portföy bazında günlük oranların medyanı
                 grp = gun_grp.groupby("Portfoy")["bekleyen_oran"].median().reset_index()
                 medyan_oran = grp["bekleyen_oran"].median()
+                BEKLEME_MAX_KATSAYI = 1.3  # talebi en fazla %30 şişir
                 if medyan_oran > 0:
                     for _, row in grp.iterrows():
                         pf = row["Portfoy"]
                         kat = row["bekleyen_oran"] / medyan_oran
-                        bekleme_katsayisi[pf] = max(1.0, kat)
+                        bekleme_katsayisi[pf] = min(max(1.0, kat), BEKLEME_MAX_KATSAYI)
                 if bekleme_katsayisi:
                     uyarilar.append(
                         f"Havuzda_Bekleme verisi kullanıldı: "
