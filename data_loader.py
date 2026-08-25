@@ -392,13 +392,13 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
             if pf in bekleme_katsayisi and bekleme_katsayisi[pf] > 1.0:
                 demand[pf] = demand[pf] * bekleme_katsayisi[pf]
 
-    # Verisi olmayan iç portföyler için ortalama ile doldur
-    ic_demand_vals = [demand[pf] for pf in ic_pf if demand.get(pf, 0.0) > 0]
-    ort_demand = sum(ic_demand_vals) / len(ic_demand_vals) if ic_demand_vals else 0.0
-    for pf in ic_pf:
-        if demand.get(pf, 0.0) == 0.0:
-            demand[pf] = ort_demand
-            uyarilar.append(f"Portföy '{pf}': talep verisi bulunamadı, ortalama kullanıldı.")
+    # Portfoy_Is_Yuku'da hiç kaydı olmayan iç portföyleri optimizasyondan çıkar
+    piy_portfoyler_set = set(portfoy_daily_refs.keys())
+    talepsiz = [pf for pf in ic_pf if pf not in piy_portfoyler_set]
+    if talepsiz:
+        for pf in talepsiz:
+            uyarilar.append(f"Portföy '{pf}': Portfoy_Is_Yuku'da talep verisi yok, optimizasyondan çıkarıldı.")
+        ic_pf = [pf for pf in ic_pf if pf not in talepsiz]
 
     # ── Eligible set: tüm (sicil × iç portföy), yalnızca istisna çıkar ──────
     eligible: set[tuple] = set()
