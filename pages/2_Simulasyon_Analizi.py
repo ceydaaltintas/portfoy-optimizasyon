@@ -270,6 +270,31 @@ sonra_kpi = _hesapla_kpi(sonra)
 
 tum_pf = sorted(set(once_kpi["pf_siciller"]) | set(sonra_kpi["pf_siciller"]))
 
+# ── OKUMA KILAVUZU ────────────────────────────────────────────────────────────
+with st.expander("Metrikler nasıl okunur?", expanded=False):
+    st.markdown("""
+**pp (yüzde puanı):** İki yüzde değerinin farkı. Örneğin karşılama %49 → %70 ise fark **+21pp**'dir.
+Yüzde değil, yüzde puan — %49'un %21 artışı değil, 21 puan artışıdır.
+
+---
+
+| Metrik | Ne anlama gelir | İyi yön |
+|--------|----------------|---------|
+| **Ort. Karşılama Oranı** | Portföylerin günlük talebinin kaçta kaçı karşılandı. %100 = talep tam karşılandı, >%100 = fazla kapasite var, <%100 = açık var. | ↑ Yüksek |
+| **Yük Dengesi (Std Sapma)** | Siciller arasındaki çalışma süresi farkı. Düşük = herkes benzer süre çalışmış, yük dengeli dağılmış. | ↓ Düşük |
+| **Ort. İlk Temas (sn)** | Bir referansın havuza düştükten sonra ilk işleme alınma süresi. | ↓ Düşük |
+| **Ort. Bekleyen Ref Oranı** | Gelen referansların aynı saatte işleme alınamayan kısmı. %0 = hepsi anında işleme alındı. | ↓ Düşük |
+
+---
+
+**Değerlendirme kutucukları:**
+- 🟢 **İyileşen:** Önce → Sonra karşılama oranı **+5pp'den fazla** arttı
+- 🔴 **Kötüleşen:** Karşılama oranı **-5pp'den fazla** düştü — o portföyde sonra günü daha az sicil kalmış olabilir
+- ⬜ **Değişmeyen:** ±5pp içinde kaldı, anlamlı bir fark yok
+
+**Karşılama oranı >%100 çıkıyorsa:** Siciller o portföyün talebinden fazla çalışmış demek — talep tahmini düşük kalmış ya da siciller ek işler de yapmış olabilir.
+    """)
+
 # ── ÖZET METRİKLER ────────────────────────────────────────────────────────────
 st.header("Özet")
 
