@@ -29,10 +29,10 @@ SHEETS_OPTIONAL = ["Havuzda_Bekleme"]
 @st.cache_resource
 def _init_sim_files():
     os.makedirs("sample_data", exist_ok=True)
-    create_sim_template(SIM_TEMPLATE_PATH)
     create_sim_samples("sample_data")
 
 _init_sim_files()
+create_sim_template(SIM_TEMPLATE_PATH)  # her zaman güncel şablon
 
 st.title("Simülasyon Analizi")
 st.caption("Optimizasyon öncesi ve sonrası gerçek performansı karşılaştır")
