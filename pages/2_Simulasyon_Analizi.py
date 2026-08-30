@@ -205,6 +205,21 @@ def _hesapla_kpi(sheets: dict) -> dict:
                     oran = (row["toplam_gelen"] - row["toplam_baslanan"]) / row["toplam_gelen"]
                     pf_bekleme_oran[pf] = max(0.0, oran)
 
+    # Sicil bazında portföy kırılımı (hangi portföyde ne kadar çalışmış)
+    sicil_pf_sure: dict[str, dict[str, float]] = {}
+    for _, row in hiz.iterrows():
+        s, pf2 = row["Sicil"], row["Portfoy"]
+        if s and pf2:
+            sicil_pf_sure.setdefault(s, {})[pf2] = float(row["Calisma_Suresi_Sn"])
+
+    # Planlı siciller (Atama'da ANA/DESTEK olanlar)
+    planli_siciller = set(
+        atama.loc[atama["Portfoy Seviyesi"].isin(["ANA", "DESTEK"]), "Sicil"]
+    )
+    # Atama'da olmayan ama Sicil_Hiz_Gun'da görünen siciller = plansız katkı
+    gercek_siciller = set(hiz["Sicil"].unique())
+    plansiz_siciller = gercek_siciller - planli_siciller
+
     return {
         "pf_siciller": pf_siciller,
         "pf_kapasite": pf_kapasite,
@@ -212,6 +227,9 @@ def _hesapla_kpi(sheets: dict) -> dict:
         "pf_karsilama": pf_karsilama,
         "gelen_ref": gelen_ref,
         "sicil_toplam": sicil_toplam,
+        "sicil_pf_sure": sicil_pf_sure,
+        "planli_siciller": planli_siciller,
+        "plansiz_siciller": plansiz_siciller,
         "yuk_std": yuk_std,
         "pf_ilk_temas": pf_ilk_temas,
         "pf_bekleme_oran": pf_bekleme_oran,
@@ -439,3 +457,87 @@ with col_s:
         for s, v in sorted(sonra_kpi["sicil_toplam"].items())
     ])
     st.bar_chart(sicil_df_sonra.set_index("Sicil"), use_container_width=True)
+
+# ── DÜŞÜK PERFORMANSLI SİCİL TESPİTİ ────────────────────────────────────────
+st.divider()
+st.header("Sicil Performans Analizi (Sonra Günü)")
+
+sonra_sure = sonra_kpi["sicil_toplam"]
+once_sure = once_kpi["sicil_toplam"]
+
+if sonra_sure:
+    medyan_sure = pd.Series(list(sonra_sure.values())).median()
+    DUSUK_ESIK = 0.60   # medyanın %60'ından az = düşük performans
+    DUSUS_ESIK = 0.30   # önceki güne göre %30'dan fazla düşüş = belirgin azalma
+
+    sicil_rows = []
+    for s in sorted(set(sonra_sure) | set(once_sure)):
+        s_sure = sonra_sure.get(s, 0.0)
+        o_sure = once_sure.get(s, 0.0)
+        dusus = (s_sure - o_sure) / o_sure if o_sure > 0 else None
+        planli = s in sonra_kpi["planli_siciller"]
+        dusuk = s_sure < medyan_sure * DUSUK_ESIK
+        belirgin_dusus = dusus is not None and dusus < -DUSUS_ESIK
+
+        uyari = []
+        if dusuk:
+            uyari.append(f"medyan altı (%{s_sure/medyan_sure*100:.0f})")
+        if belirgin_dusus:
+            uyari.append(f"önceki güne göre %{abs(dusus)*100:.0f} düşüş")
+
+        sicil_rows.append({
+            "Sicil": s,
+            "Planlı mı?": "Evet" if planli else "Hayır (İstisna/Plansız)",
+            "Önce Çalışma (dk)": round(o_sure / 60) if o_sure else "—",
+            "Sonra Çalışma (dk)": round(s_sure / 60),
+            "Değişim": f"%{dusus*100:+.0f}" if dusus is not None else "—",
+            "Uyarı": " | ".join(uyari) if uyari else "",
+        })
+
+    df_sicil = pd.DataFrame(sicil_rows)
+
+    def _renk_sicil(row):
+        renkler = [""] * len(row)
+        idx = list(row.index)
+        if row["Uyarı"]:
+            renkler[idx.index("Sonra Çalışma (dk)")] = "background-color: #FFC7CE"
+            renkler[idx.index("Uyarı")] = "background-color: #FFC7CE"
+        if row["Planlı mı?"] != "Evet":
+            renkler[idx.index("Planlı mı?")] = "background-color: #EDEDED; color: #888"
+        return renkler
+
+    st.dataframe(
+        df_sicil.style.apply(_renk_sicil, axis=1),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    dusuk_sayisi = sum(1 for r in sicil_rows if r["Uyarı"])
+    plansiz_sayisi = sum(1 for r in sicil_rows if r["Planlı mı?"] != "Evet")
+    st.caption(
+        f"Medyan çalışma süresi (sonra günü): **{medyan_sure/60:.0f} dk** | "
+        f"Düşük performans uyarısı: **{dusuk_sayisi} sicil** | "
+        f"Plansız katkı (istisna/atama dışı): **{plansiz_sayisi} sicil**"
+    )
+
+# ── PLANSİZ KATKI ANALİZİ ─────────────────────────────────────────────────────
+sonra_plansiz = sonra_kpi["plansiz_siciller"]
+if sonra_plansiz:
+    st.divider()
+    st.subheader("Plansız Katkı — Atama Dışı Çalışan Siciller (Sonra Günü)")
+    st.info(
+        f"Aşağıdaki {len(sonra_plansiz)} sicil optimizasyon atamasında yer almıyor "
+        f"(istisna veya başka nedenle) ama gerçekte portföylere katkı yapmış. "
+        f"Bu katkı karşılama oranlarına dahil edildi."
+    )
+    plansiz_rows = []
+    for s in sorted(sonra_plansiz):
+        pf_sure = sonra_kpi["sicil_pf_sure"].get(s, {})
+        for pf2, sure in pf_sure.items():
+            plansiz_rows.append({
+                "Sicil": s,
+                "Portföy": pf2,
+                "Çalışma (dk)": round(sure / 60),
+            })
+    if plansiz_rows:
+        st.dataframe(pd.DataFrame(plansiz_rows), use_container_width=True, hide_index=True)
