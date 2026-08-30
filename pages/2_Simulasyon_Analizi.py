@@ -520,24 +520,89 @@ if sonra_sure:
         f"Plansız katkı (istisna/atama dışı): **{plansiz_sayisi} sicil**"
     )
 
-# ── PLANSİZ KATKI ANALİZİ ─────────────────────────────────────────────────────
-sonra_plansiz = sonra_kpi["plansiz_siciller"]
-if sonra_plansiz:
-    st.divider()
-    st.subheader("Plansız Katkı — Atama Dışı Çalışan Siciller (Sonra Günü)")
-    st.info(
-        f"Aşağıdaki {len(sonra_plansiz)} sicil optimizasyon atamasında yer almıyor "
-        f"(istisna veya başka nedenle) ama gerçekte portföylere katkı yapmış. "
-        f"Bu katkı karşılama oranlarına dahil edildi."
-    )
-    plansiz_rows = []
-    for s in sorted(sonra_plansiz):
-        pf_sure = sonra_kpi["sicil_pf_sure"].get(s, {})
-        for pf2, sure in pf_sure.items():
-            plansiz_rows.append({
-                "Sicil": s,
-                "Portföy": pf2,
+# ── OPTİMİZASYON DIŞI ÇALIŞMA ANALİZİ ───────────────────────────────────────
+st.divider()
+st.header("Optimizer Dışı Çalışma — Kendi Eklenen Yetkiler")
+st.caption(
+    "Optimizer'ın atamadığı portföylerde gerçekte çalışılmış olması, "
+    "sicillerin ek yetki ekleyip o portföylere girdiğinin göstergesidir. "
+    "Bu portföyler optimizer'ın yetersiz kapattığı alanlara işaret eder."
+)
+
+# Sonra günü: her sicil için atanan vs gerçekte çalışılan portföyler
+sonra_atama = sonra["Atama"].copy()
+sonra_atama.columns = [str(c).strip() for c in sonra_atama.columns]
+sonra_atama["Sicil"] = sonra_atama["Sicil"].apply(_cs)
+sonra_atama["Portfoy"] = sonra_atama["Portfoy"].apply(_cs)
+sonra_atama["Portfoy Seviyesi"] = sonra_atama["Portfoy Seviyesi"].apply(_cs)
+
+# Sicil → atanan portföyler seti
+sicil_atanan: dict[str, set] = {}
+for _, row in sonra_atama.iterrows():
+    if row["Sicil"] and row["Portfoy Seviyesi"] in ("ANA", "DESTEK"):
+        sicil_atanan.setdefault(row["Sicil"], set()).add(row["Portfoy"])
+
+# Sicil → gerçekte çalışılan portföyler (Sicil_Hiz_Gun)
+sicil_gercek = sonra_kpi["sicil_pf_sure"]  # {sicil: {portfoy: sure_sn}}
+
+# Kendi eklenen: gerçekte çalışılmış ama atanmamış portföyler
+disi_rows = []
+pf_disi_katki: dict[str, float] = {}  # portföy bazında optimizer dışı toplam katki
+
+for sicil, pf_sureler in sicil_gercek.items():
+    atanan = sicil_atanan.get(sicil, set())
+    for pf, sure in pf_sureler.items():
+        if pf not in atanan and sure > 0:
+            disi_rows.append({
+                "Sicil": sicil,
+                "Portföy": pf,
+                "Atamada Var mı?": "Hayır",
                 "Çalışma (dk)": round(sure / 60),
+                "Not": "Ek yetki ile girilmiş olabilir",
             })
-    if plansiz_rows:
-        st.dataframe(pd.DataFrame(plansiz_rows), use_container_width=True, hide_index=True)
+            pf_disi_katki[pf] = pf_disi_katki.get(pf, 0.0) + sure
+
+if disi_rows:
+    tab_sicil, tab_portfoy = st.tabs(["Sicil Bazlı", "Portföy Bazlı"])
+
+    with tab_sicil:
+        st.markdown("**Hangi sicil, optimizer'ın atamadığı portföylerde çalıştı?**")
+        df_disi = pd.DataFrame(disi_rows).sort_values(["Sicil", "Çalışma (dk)"], ascending=[True, False])
+        st.dataframe(df_disi, use_container_width=True, hide_index=True)
+        st.caption(f"Toplam {len(set(r['Sicil'] for r in disi_rows))} sicil, "
+                   f"{len(set(r['Portföy'] for r in disi_rows))} farklı portföyde optimizer dışı çalışmış.")
+
+    with tab_portfoy:
+        st.markdown("**Hangi portföyler en çok optimizer dışı katkı aldı? → Optimizer'ın yetersiz kapattığı alanlar**")
+        pf_disi_rows = sorted(pf_disi_katki.items(), key=lambda x: -x[1])
+        df_pf_disi = pd.DataFrame([
+            {
+                "Portföy": pf,
+                "Optimizer Dışı Katkı (dk)": round(sure / 60),
+                "Optimizer Dışı Katkı Yapan Sicil Sayısı": sum(
+                    1 for r in disi_rows if r["Portföy"] == pf
+                ),
+                "Yorum": "Optimizer bu portföyü yeterince kapatamamış olabilir",
+            }
+            for pf, sure in pf_disi_rows
+        ])
+
+        def _renk_pf_disi(row):
+            renkler = [""] * len(row)
+            idx = list(row.index)
+            katki = row["Optimizer Dışı Katkı (dk)"]
+            if katki > 60:
+                renkler[idx.index("Optimizer Dışı Katkı (dk)")] = "background-color: #FFC7CE"
+                renkler[idx.index("Yorum")] = "background-color: #FFC7CE"
+            elif katki > 20:
+                renkler[idx.index("Optimizer Dışı Katkı (dk)")] = "background-color: #FFEB9C"
+            return renkler
+
+        st.dataframe(
+            df_pf_disi.style.apply(_renk_pf_disi, axis=1),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption("🔴 >60dk optimizer dışı katkı — ciddi açık | 🟡 20-60dk — orta | ⬜ <20dk — düşük")
+else:
+    st.success("Tüm siciller yalnızca atandıkları portföylerde çalışmış — optimizer dışı yetki eklenmemiş.")
