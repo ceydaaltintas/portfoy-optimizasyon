@@ -269,6 +269,79 @@ if once_bk is not None and sonra_bk is not None:
 else:
     m4.metric("Ort. Bekleyen Ref Oranı", "—", help="Havuzda_Bekleme sheetiyle hesaplanır")
 
+# ── YORUM ─────────────────────────────────────────────────────────────────────
+st.divider()
+st.header("Değerlendirme")
+
+ESIK_PP = 5.0  # karşılama oranında anlamlı fark eşiği
+
+iyilesen = []
+kotuleen = []
+degismeyen = []
+
+for pf in tum_pf:
+    o = once_kpi["pf_karsilama"].get(pf, 0.0) * 100
+    s = sonra_kpi["pf_karsilama"].get(pf, 0.0) * 100
+    delta = s - o
+    if delta > ESIK_PP:
+        iyilesen.append((pf, o, s, delta))
+    elif delta < -ESIK_PP:
+        kotuleen.append((pf, o, s, delta))
+    else:
+        degismeyen.append((pf, o, s, delta))
+
+iyilesen.sort(key=lambda x: -x[3])
+kotuleen.sort(key=lambda x: x[3])
+
+col_iyi, col_kotu, col_ayni = st.columns(3)
+
+with col_iyi:
+    st.success(f"**İyileşen — {len(iyilesen)} portföy**")
+    if iyilesen:
+        for pf, o, s, d in iyilesen:
+            st.markdown(f"- **{pf}**: %{o:.0f} → %{s:.0f} *(+{d:.0f}pp)*")
+    else:
+        st.markdown("—")
+
+with col_kotu:
+    st.error(f"**Kötüleşen — {len(kotuleen)} portföy**")
+    if kotuleen:
+        for pf, o, s, d in kotuleen:
+            st.markdown(f"- **{pf}**: %{o:.0f} → %{s:.0f} *({d:.0f}pp)*")
+    else:
+        st.markdown("—")
+
+with col_ayni:
+    st.info(f"**Değişmeyen (±{ESIK_PP:.0f}pp) — {len(degismeyen)} portföy**")
+    if degismeyen:
+        for pf, o, s, d in degismeyen:
+            isaret = f"+{d:.0f}" if d >= 0 else f"{d:.0f}"
+            st.markdown(f"- **{pf}**: %{o:.0f} → %{s:.0f} *({isaret}pp)*")
+    else:
+        st.markdown("—")
+
+# Havuzda_Bekleme yorumu
+if once_temas is not None and sonra_temas is not None:
+    st.divider()
+    temas_delta = sonra_temas - once_temas
+    bekleme_satirlari = []
+    for pf in tum_pf:
+        ot = once_kpi["pf_ilk_temas"].get(pf)
+        st2 = sonra_kpi["pf_ilk_temas"].get(pf)
+        if ot and st2:
+            d = st2 - ot
+            if d < -30:
+                bekleme_satirlari.append(f"- **{pf}**: {ot:.0f}sn → {st2:.0f}sn *(−{abs(d):.0f}sn, hızlandı)*")
+            elif d > 30:
+                bekleme_satirlari.append(f"- **{pf}**: {ot:.0f}sn → {st2:.0f}sn *(+{d:.0f}sn, yavaşladı)*")
+    if bekleme_satirlari:
+        if temas_delta < 0:
+            st.success(f"**İlk temas süresi ortalama {abs(temas_delta):.0f}sn kısaldı.** Belirgin değişen portföyler:")
+        else:
+            st.warning(f"**İlk temas süresi ortalama {temas_delta:.0f}sn uzadı.** Belirgin değişen portföyler:")
+        for s in bekleme_satirlari:
+            st.markdown(s)
+
 # ── PORTFÖY DETAY TABLOSU ─────────────────────────────────────────────────────
 st.divider()
 st.header("Portföy Bazlı Karşılaştırma")
