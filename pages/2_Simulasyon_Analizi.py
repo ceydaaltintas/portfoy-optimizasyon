@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 from create_sim_template import create_sim_template
+from create_sim_sample import create_sim_samples
 
 st.set_page_config(
     page_title="Simülasyon Analizi",
@@ -19,16 +20,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 SIM_TEMPLATE_PATH = "sample_data/simulasyon_sablon.xlsx"
+SIM_ONCE_PATH = "sample_data/simulasyon_once.xlsx"
+SIM_SONRA_PATH = "sample_data/simulasyon_sonra.xlsx"
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 SHEETS_REQUIRED = ["Atama", "Sicil_Hiz_Gun", "Portfoy_Is_Yuku_Gun"]
 SHEETS_OPTIONAL = ["Havuzda_Bekleme"]
 
 @st.cache_resource
-def _init_sim_template():
+def _init_sim_files():
     os.makedirs("sample_data", exist_ok=True)
     create_sim_template(SIM_TEMPLATE_PATH)
+    create_sim_samples("sample_data")
 
-_init_sim_template()
+_init_sim_files()
 
 st.title("Simülasyon Analizi")
 st.caption("Optimizasyon öncesi ve sonrası gerçek performansı karşılaştır")
@@ -47,14 +51,39 @@ with st.expander("Nasıl kullanılır?", expanded=False):
 - `Havuzda_Bekleme` — saatlik bekleme verisi (opsiyonel, ilk temas süresi için)
     """)
 
+btn1, btn2, btn3 = st.columns(3)
 try:
     with open(SIM_TEMPLATE_PATH, "rb") as f:
-        st.download_button(
-            "Simülasyon Şablonunu İndir",
+        btn1.download_button(
+            "Boş Şablonu İndir",
             data=f.read(),
             file_name="simulasyon_sablon.xlsx",
             mime=MIME_XLSX,
             help="Önce ve Sonra dosyaları için aynı şablonu kullanın",
+        )
+except FileNotFoundError:
+    pass
+
+try:
+    with open(SIM_ONCE_PATH, "rb") as f:
+        btn2.download_button(
+            "Örnek: Önce Verisi",
+            data=f.read(),
+            file_name="simulasyon_once.xlsx",
+            mime=MIME_XLSX,
+            help="Optimizasyon öncesi gün — dağınık atamalar, düşük karşılama",
+        )
+except FileNotFoundError:
+    pass
+
+try:
+    with open(SIM_SONRA_PATH, "rb") as f:
+        btn3.download_button(
+            "Örnek: Sonra Verisi",
+            data=f.read(),
+            file_name="simulasyon_sonra.xlsx",
+            mime=MIME_XLSX,
+            help="Optimizasyon sonrası gün — daha iyi atamalar, bazı siciller ek yetki eklemiş",
         )
 except FileNotFoundError:
     pass
