@@ -487,7 +487,6 @@ st.divider()
 st.subheader("Karşılama Oranı — Önce vs Sonra")
 st.caption("Her portföy için önce (açık mavi) ve sonra (koyu mavi) değerleri yan yana gösterilir. %100 çizgisi = talep tam karşılandı.")
 
-import altair as alt
 
 karsilama_rows = []
 for pf in tum_pf:
@@ -496,21 +495,35 @@ for pf in tum_pf:
 
 karsilama_df = pd.DataFrame(karsilama_rows)
 
-bars = alt.Chart(karsilama_df).mark_bar().encode(
-    x=alt.X("Dönem:N", title=None, axis=alt.Axis(labelAngle=0)),
-    y=alt.Y("Karşılama (%):Q", title="Karşılama Oranı (%)"),
-    color=alt.Color("Dönem:N", scale=alt.Scale(domain=["Önce", "Sonra"], range=["#AED6F1", "#1A5276"])),
-    tooltip=["Portföy", "Dönem", "Karşılama (%)"],
-).properties(width=55, height=300)
-
-rule = alt.Chart(pd.DataFrame({"y": [100]})).mark_rule(color="red", strokeDash=[4, 4]).encode(y="y:Q")
-
-chart = alt.layer(bars, rule).facet(
-    column=alt.Column("Portföy:N", title=None, spacing=8),
-    data=karsilama_df,
-)
-
-st.altair_chart(chart, use_container_width=False)
+vl_spec = {
+    "facet": {"field": "Portföy", "type": "nominal", "title": None, "spacing": 8},
+    "spec": {
+        "layer": [
+            {
+                "mark": "bar",
+                "encoding": {
+                    "x": {"field": "Dönem", "type": "nominal", "title": None, "axis": {"labelAngle": 0}},
+                    "y": {"field": "Karşılama (%)", "type": "quantitative", "title": "Karşılama Oranı (%)"},
+                    "color": {
+                        "field": "Dönem", "type": "nominal",
+                        "scale": {"domain": ["Önce", "Sonra"], "range": ["#AED6F1", "#1A5276"]},
+                    },
+                    "tooltip": [
+                        {"field": "Portföy"}, {"field": "Dönem"},
+                        {"field": "Karşılama (%)", "type": "quantitative"},
+                    ],
+                },
+                "width": 55,
+                "height": 300,
+            },
+            {
+                "mark": {"type": "rule", "color": "red", "strokeDash": [4, 4]},
+                "encoding": {"y": {"datum": 100}},
+            },
+        ]
+    },
+}
+st.vega_lite_chart(karsilama_df, vl_spec, use_container_width=False)
 
 # ── SİCİL YÜK DAĞILIMI ────────────────────────────────────────────────────────
 st.divider()
