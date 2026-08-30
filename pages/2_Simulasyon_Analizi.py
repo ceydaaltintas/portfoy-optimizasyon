@@ -488,42 +488,34 @@ st.subheader("Karşılama Oranı — Önce vs Sonra")
 st.caption("Her portföy için önce (açık mavi) ve sonra (koyu mavi) değerleri yan yana gösterilir. %100 çizgisi = talep tam karşılandı.")
 
 
+import plotly.express as px
+import plotly.graph_objects as go
+
 karsilama_rows = []
 for pf in tum_pf:
-    karsilama_rows.append({"Portföy": pf, "Dönem": "Önce", "Karşılama (%)": round(once_kpi["pf_karsilama"].get(pf, 0) * 100, 1)})
-    karsilama_rows.append({"Portföy": pf, "Dönem": "Sonra", "Karşılama (%)": round(sonra_kpi["pf_karsilama"].get(pf, 0) * 100, 1)})
+    karsilama_rows.append({"Portföy": pf, "Dönem": "Önce", "Karsilama": round(once_kpi["pf_karsilama"].get(pf, 0) * 100, 1)})
+    karsilama_rows.append({"Portföy": pf, "Dönem": "Sonra", "Karsilama": round(sonra_kpi["pf_karsilama"].get(pf, 0) * 100, 1)})
 
 karsilama_df = pd.DataFrame(karsilama_rows)
 
-vl_spec = {
-    "facet": {"field": "Portföy", "type": "nominal", "title": None, "spacing": 8},
-    "spec": {
-        "layer": [
-            {
-                "mark": "bar",
-                "encoding": {
-                    "x": {"field": "Dönem", "type": "nominal", "title": None, "axis": {"labelAngle": 0}},
-                    "y": {"field": "Karşılama (%)", "type": "quantitative", "title": "Karşılama Oranı (%)"},
-                    "color": {
-                        "field": "Dönem", "type": "nominal",
-                        "scale": {"domain": ["Önce", "Sonra"], "range": ["#AED6F1", "#1A5276"]},
-                    },
-                    "tooltip": [
-                        {"field": "Portföy"}, {"field": "Dönem"},
-                        {"field": "Karşılama (%)", "type": "quantitative"},
-                    ],
-                },
-                "width": 55,
-                "height": 300,
-            },
-            {
-                "mark": {"type": "rule", "color": "red", "strokeDash": [4, 4]},
-                "encoding": {"y": {"datum": 100}},
-            },
-        ]
-    },
-}
-st.vega_lite_chart(karsilama_df, vl_spec, use_container_width=False)
+fig = px.bar(
+    karsilama_df,
+    x="Portföy",
+    y="Karsilama",
+    color="Dönem",
+    barmode="group",
+    color_discrete_map={"Önce": "#AED6F1", "Sonra": "#1A5276"},
+    labels={"Karsilama": "Karşılama Oranı (%)", "Portföy": ""},
+    category_orders={"Dönem": ["Önce", "Sonra"]},
+)
+fig.add_hline(y=100, line_dash="dash", line_color="red", line_width=1.5)
+fig.update_layout(
+    height=380,
+    margin=dict(t=10, b=10),
+    legend_title_text="",
+    yaxis_title="Karşılama Oranı (%)",
+)
+st.plotly_chart(fig, use_container_width=True)
 
 # ── SİCİL YÜK DAĞILIMI ────────────────────────────────────────────────────────
 st.divider()
