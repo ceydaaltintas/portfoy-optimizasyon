@@ -11,8 +11,8 @@ NOTE_FONT = Font(italic=True, color="1F4E78", name="Arial", size=9)
 
 SHEETS = {
     "Atama": {
-        "cols": ["Sicil", "Portfoy", "Portfoy Seviyesi"],
-        "note": "O güne ait aktif atamalar. Portfoy Seviyesi: ANA / DESTEK / GECİCİ",
+        "cols": ["Sicil", "Portfoy", "Portfoy Seviyesi", "Baslangic Zamani", "Bitis Zamani"],
+        "note": "O güne ait aktif atamalar. Portfoy Seviyesi: ANA / DESTEK / GECİCİ  |  Baslangic/Bitis Zamani: yalnızca GECİCİ satırları için doldurulur (HH:MM formatı)",
     },
     "Sicil_Hiz_Gun": {
         "cols": ["Portfoy", "Sicil", "Calisma_Suresi_Sn", "Referans_Adedi"],

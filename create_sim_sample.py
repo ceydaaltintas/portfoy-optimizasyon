@@ -37,13 +37,15 @@ def _atama_once() -> pd.DataFrame:
     for i, sicil in enumerate(SICILLER):
         ana_pf = PORTFOYLER[i % len(PORTFOYLER)]
         ana_map[sicil] = ana_pf
-        rows.append({"Sicil": sicil, "Portfoy": ana_pf, "Portfoy Seviyesi": "ANA"})
+        rows.append({"Sicil": sicil, "Portfoy": ana_pf, "Portfoy Seviyesi": "ANA",
+                     "Baslangic Zamani": None, "Bitis Zamani": None})
 
     for sicil in SICILLER:
         ana = ana_map[sicil]
         diger = [p for p in PORTFOYLER if p != ana]
         for pf in random.sample(diger, random.randint(1, 2)):
-            rows.append({"Sicil": sicil, "Portfoy": pf, "Portfoy Seviyesi": "DESTEK"})
+            rows.append({"Sicil": sicil, "Portfoy": pf, "Portfoy Seviyesi": "DESTEK",
+                         "Baslangic Zamani": None, "Bitis Zamani": None})
     return pd.DataFrame(rows)
 
 
@@ -54,19 +56,20 @@ def _atama_sonra() -> pd.DataFrame:
     for i, sicil in enumerate(SICILLER):
         ana_pf = PORTFOYLER[i % len(PORTFOYLER)]
         ana_map[sicil] = ana_pf
-        rows.append({"Sicil": sicil, "Portfoy": ana_pf, "Portfoy Seviyesi": "ANA"})
+        rows.append({"Sicil": sicil, "Portfoy": ana_pf, "Portfoy Seviyesi": "ANA",
+                     "Baslangic Zamani": None, "Bitis Zamani": None})
 
     # Optimizer mantığı: yoğun portföylere (PF-03, PF-07, PF-09) daha fazla destek
     yogun = {"PF-03", "PF-07", "PF-09"}
     for sicil in SICILLER:
         ana = ana_map[sicil]
         diger = [p for p in PORTFOYLER if p != ana]
-        # Yoğun portföylere öncelik
         oncelikli = [p for p in diger if p in yogun]
         normal = [p for p in diger if p not in yogun]
         secilen = oncelikli[:2] + random.sample(normal, max(0, 3 - len(oncelikli[:2])))
         for pf in secilen[:3]:
-            rows.append({"Sicil": sicil, "Portfoy": pf, "Portfoy Seviyesi": "DESTEK"})
+            rows.append({"Sicil": sicil, "Portfoy": pf, "Portfoy Seviyesi": "DESTEK",
+                         "Baslangic Zamani": None, "Bitis Zamani": None})
     return pd.DataFrame(rows)
 
 
