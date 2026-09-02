@@ -17,7 +17,7 @@ PORTFOYLER = [f"PF-{i:02d}" for i in range(1, 11)]
 SICILLER = [str(s) for s in range(10001, 10013)]  # 12 sicil
 GUN_SN = 27000  # ~7.5 saat net
 
-SAATLER = [f"{h:02d}:00" for h in range(9, 18)]
+SAATLER = [f"{h:02d}:00" for h in range(8, 18)]
 
 
 def _is_gunu(gun_geri: int) -> datetime.date:

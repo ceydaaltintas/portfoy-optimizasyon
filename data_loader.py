@@ -2,7 +2,7 @@ from __future__ import annotations
 import re
 import pandas as pd
 
-GUN_SAAT = 9          # 09:00–18:00
+GUN_SAAT = 9          # 08:30–17:30
 DESTEK_CONTRIB = 0.30
 
 
@@ -345,10 +345,10 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
             hb["Ayni_Saatte_Baslanan"] = pd.to_numeric(hb["Ayni_Saatte_Baslanan"], errors="coerce").fillna(0)
             hb["Tarih"] = pd.to_datetime(hb["Tarih"], dayfirst=True, errors="coerce")
             hb = hb[hb["Tarih"].notna()]
-            # Mesai saatleri dışındaki satırları dışarıda bırak (09:00–18:00)
+            # Mesai saatleri dışındaki satırları dışarıda bırak (08:30–17:30 → tam saat 08:00–17:00)
             if "Saat" in hb.columns:
                 saat_str = hb["Saat"].astype(str).str.strip().str[:5]
-                hb = hb[(saat_str >= "09:00") & (saat_str <= "17:59")]
+                hb = hb[(saat_str >= "08:00") & (saat_str <= "17:00")]
             if not hb.empty:
                 # Her (Portfoy, Tarih) için günlük toplam → günlük bekleyen oran
                 gun_grp = hb.groupby(["Portfoy", "Tarih"]).agg(

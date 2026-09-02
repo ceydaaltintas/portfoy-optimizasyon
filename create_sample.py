@@ -177,7 +177,7 @@ def create_sample(path: str = "sample_data/ornek_veri.xlsx"):
             is_gunleri.append(d)
         d -= datetime.timedelta(days=1)
 
-    SAATLER = [f"{h:02d}:00" for h in range(9, 18)]
+    SAATLER = [f"{h:02d}:00" for h in range(8, 18)]
     # Bazı portföyler kronik yoğun, bazıları normal — gerçekçi dağılım için
     yogun_pf = random.sample(PORTFOYLER_IC, 4)
 
