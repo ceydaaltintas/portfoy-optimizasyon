@@ -165,8 +165,11 @@ def _hesapla_kpi(sheets: dict) -> dict:
     # Portföy başına atanan siciller (ANA + DESTEK)
     ic_atamalik = atama[atama["Portfoy Seviyesi"].isin(["ANA", "DESTEK"])]
     pf_siciller: dict[str, list] = {}
+    pf_destek_sayisi: dict[str, int] = {}
     for _, row in ic_atamalik.iterrows():
         pf_siciller.setdefault(row["Portfoy"], []).append(row["Sicil"])
+        if row["Portfoy Seviyesi"] == "DESTEK":
+            pf_destek_sayisi[row["Portfoy"]] = pf_destek_sayisi.get(row["Portfoy"], 0) + 1
 
     # Sicil bazında toplam çalışma süresi (tüm portföylerin toplamı)
     sicil_toplam = hiz.groupby("Sicil")["Calisma_Suresi_Sn"].sum().to_dict()
@@ -251,6 +254,7 @@ def _hesapla_kpi(sheets: dict) -> dict:
 
     return {
         "pf_siciller": pf_siciller,
+        "pf_destek_sayisi": pf_destek_sayisi,
         "pf_kapasite": pf_kapasite,
         "pf_talep": pf_talep,
         "pf_karsilama": pf_karsilama,
@@ -424,6 +428,8 @@ for pf in tum_pf:
     s_kar = sonra_kpi["pf_karsilama"].get(pf, 0.0) * 100
     o_sic = len(once_kpi["pf_siciller"].get(pf, []))
     s_sic = len(sonra_kpi["pf_siciller"].get(pf, []))
+    o_des = once_kpi["pf_destek_sayisi"].get(pf, 0)
+    s_des = sonra_kpi["pf_destek_sayisi"].get(pf, 0)
     o_ref = once_kpi["gelen_ref"].get(pf, 0)
     s_ref = sonra_kpi["gelen_ref"].get(pf, 0)
     o_temas = once_kpi["pf_ilk_temas"].get(pf)
@@ -436,6 +442,9 @@ for pf in tum_pf:
         "Önce Sicil": o_sic,
         "Sonra Sicil": s_sic,
         "Δ Sicil": s_sic - o_sic,
+        "Önce DESTEK": o_des,
+        "Sonra DESTEK": s_des,
+        "Δ DESTEK": s_des - o_des,
         "Önce Gelen Ref": int(o_ref),
         "Sonra Gelen Ref": int(s_ref),
         "Önce Karşılama %": round(o_kar, 1),
