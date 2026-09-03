@@ -424,8 +424,17 @@ else:
 
 once_sark_ref = sum(once_kpi["pf_sarkan_ref"].values())
 sonra_sark_ref = sum(sonra_kpi["pf_sarkan_ref"].values())
-once_sark_sic = sum(once_kpi["pf_sarkan_sicil"].values())
-sonra_sark_sic = sum(sonra_kpi["pf_sarkan_sicil"].values())
+
+# Unique sicil sayısı: sarkan refi olan portföylerdeki atanmış sicillerin birleşimi
+def _uniq_sarkan_sicil(kpi):
+    uniq = set()
+    for pf, count in kpi["pf_sarkan_sicil"].items():
+        if count > 0:
+            uniq.update(kpi["pf_siciller"].get(pf, []))
+    return len(uniq)
+
+once_sark_sic = _uniq_sarkan_sicil(once_kpi)
+sonra_sark_sic = _uniq_sarkan_sicil(sonra_kpi)
 if once_sark_ref or sonra_sark_ref:
     ms1, ms2 = st.columns(2)
     ms1.metric("Mesai Sonu Sarkan Ref (Toplam)", f"{sonra_sark_ref}",
