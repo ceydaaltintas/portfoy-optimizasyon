@@ -189,11 +189,15 @@ def _hesapla_kpi(sheets: dict) -> dict:
     # Sicil bazında toplam çalışma süresi (tüm portföylerin toplamı)
     sicil_toplam = hiz.groupby("Sicil")["Calisma_Suresi_Sn"].sum().to_dict()
 
-    # Portföy başına gerçek kapasite: o portföyde çalışan sicillerin toplam süresi
+    # Portföy başına gerçek kapasite: Atama'daki sicillerin o portföyde çalıştığı süre
     pf_kapasite: dict[str, float] = {}
+    pf_kapasite_disi: dict[str, float] = {}  # Atama dışı sicillerin katkısı
     for pf, siciller in pf_siciller.items():
-        pf_hiz = hiz[(hiz["Portfoy"] == pf) & (hiz["Sicil"].isin(siciller))]
-        pf_kapasite[pf] = float(pf_hiz["Calisma_Suresi_Sn"].sum())
+        sicil_set = set(siciller)
+        pf_hiz_atamali = hiz[(hiz["Portfoy"] == pf) & (hiz["Sicil"].isin(sicil_set))]
+        pf_hiz_disi = hiz[(hiz["Portfoy"] == pf) & (~hiz["Sicil"].isin(sicil_set))]
+        pf_kapasite[pf] = float(pf_hiz_atamali["Calisma_Suresi_Sn"].sum())
+        pf_kapasite_disi[pf] = float(pf_hiz_disi["Calisma_Suresi_Sn"].sum())
 
     # Portföy başına talep: gelen_ref × o portföydeki ort. ref süresi
     pf_ref_sure: dict[str, float] = {}
@@ -310,6 +314,7 @@ def _hesapla_kpi(sheets: dict) -> dict:
         "pf_sarkan_ref": pf_sarkan_ref,
         "pf_sarkan_sicil": pf_sarkan_sicil,
         "pf_yuk_std": pf_yuk_std,
+        "pf_kapasite_disi": pf_kapasite_disi,
     }
 
 
@@ -506,6 +511,8 @@ for pf in tum_pf:
     s_sark_sic = sonra_kpi["pf_sarkan_sicil"].get(pf)
     o_yuk = once_kpi["pf_yuk_std"].get(pf)
     s_yuk = sonra_kpi["pf_yuk_std"].get(pf)
+    o_disi = once_kpi["pf_kapasite_disi"].get(pf, 0.0)
+    s_disi = sonra_kpi["pf_kapasite_disi"].get(pf, 0.0)
 
     row = {
         "Portföy": pf,
@@ -539,6 +546,9 @@ for pf in tum_pf:
         row["Önce Yük Dengesi (dk)"] = round(o_yuk / 60) if o_yuk else 0
         row["Sonra Yük Dengesi (dk)"] = round(s_yuk / 60) if s_yuk else 0
         row["Δ Yük Dengesi"] = round(((s_yuk or 0) - (o_yuk or 0)) / 60)
+    if o_disi > 0 or s_disi > 0:
+        row["Önce Atama Dışı Kapasite (dk)"] = round(o_disi / 60)
+        row["Sonra Atama Dışı Kapasite (dk)"] = round(s_disi / 60)
     rows.append(row)
 
 df = pd.DataFrame(rows)
