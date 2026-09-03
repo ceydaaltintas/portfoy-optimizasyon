@@ -442,16 +442,10 @@ else:
 once_sark_ref = sum(once_kpi["pf_sarkan_ref"].values())
 sonra_sark_ref = sum(sonra_kpi["pf_sarkan_ref"].values())
 
-once_sark_sic = sum(once_kpi["pf_sarkan_sicil"].values())
-sonra_sark_sic = sum(sonra_kpi["pf_sarkan_sicil"].values())
 if once_sark_ref or sonra_sark_ref:
-    ms1, ms2 = st.columns(2)
-    ms1.metric("Mesai Sonu Sarkan Ref (Toplam)", f"{sonra_sark_ref}",
-               f"{sonra_sark_ref - once_sark_ref:+d}", delta_color="inverse",
-               help="17:00 saatinde başlanamamış ref adedi. Düşük = daha az taşma")
-    ms2.metric("Mesai Sonu Aktif Kişi (Toplam)", f"{sonra_sark_sic}",
-               f"{sonra_sark_sic - once_sark_sic:+d}", delta_color="inverse",
-               help="17:00 saatinde hâlâ çalışan sicil adedi. Havuzda_Bekleme'den")
+    st.metric("Mesai Sonu Sarkan Ref (Toplam)", f"{sonra_sark_ref}",
+              f"{sonra_sark_ref - once_sark_ref:+d}", delta_color="inverse",
+              help="Mesai bitiş saatinde (17:30 veya 18:00) başlanamamış ref adedi. Düşük = daha az taşma")
 
 # ── YORUM ─────────────────────────────────────────────────────────────────────
 st.divider()
@@ -546,8 +540,6 @@ for pf in tum_pf:
     s_bk = sonra_kpi["pf_bekleme_oran"].get(pf)
     o_sark_ref = once_kpi["pf_sarkan_ref"].get(pf)
     s_sark_ref = sonra_kpi["pf_sarkan_ref"].get(pf)
-    o_sark_sic = once_kpi["pf_sarkan_sicil"].get(pf)
-    s_sark_sic = sonra_kpi["pf_sarkan_sicil"].get(pf)
     o_yuk = once_kpi["pf_yuk_std"].get(pf)
     s_yuk = sonra_kpi["pf_yuk_std"].get(pf)
     o_disi = once_kpi["pf_kapasite_disi"].get(pf, 0.0)
@@ -578,9 +570,6 @@ for pf in tum_pf:
         row["Sonra Sarkan Ref"] = s_sark_ref if s_sark_ref is not None else "—"
         δ_sark = (s_sark_ref or 0) - (o_sark_ref or 0)
         row["Δ Sarkan Ref"] = δ_sark
-    if o_sark_sic is not None or s_sark_sic is not None:
-        row["Önce Sarkan Kişi"] = o_sark_sic if o_sark_sic is not None else "—"
-        row["Sonra Sarkan Kişi"] = s_sark_sic if s_sark_sic is not None else "—"
     if o_yuk is not None or s_yuk is not None:
         row["Önce Yük Dengesi (dk)"] = round(o_yuk / 60) if o_yuk else 0
         row["Sonra Yük Dengesi (dk)"] = round(s_yuk / 60) if s_yuk else 0
