@@ -31,8 +31,8 @@ SHEETS = {
         "note": "OPSİYONEL. Saatlik portföy bekleme verisi. Tarih: GG.AA.YYYY, Saat: HH:MM",
     },
     "Istisna": {
-        "cols": ["Sicil", "Neden"],
-        "note": "OPSİYONEL. DESTEK yetkisi olup fiilen işlem yapmayan siciller. Bu siciller DESTEK sayısı ve kapasite hesabından çıkarılır.",
+        "cols": ["Sicil", "Portfoy"],
+        "note": "OPSİYONEL. Sicil+Portfoy doluysa → o sicil yalnızca o portföyde istisna. Portfoy boşsa → sicil hiçbir portföyde sayılmaz.",
     },
 }
 

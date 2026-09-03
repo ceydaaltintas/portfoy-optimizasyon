@@ -165,13 +165,23 @@ def _hesapla_kpi(sheets: dict) -> dict:
     atama = atama[atama["Sicil"] != ""]
 
     # İstisna sicilleri — DESTEK yetkisi var ama işlem yapmıyor
-    istisna_siciller: set = set()
+    # istisna_global: portföy belirtilmemiş → hiçbir portföyde sayılmaz
+    # istisna_pf: {sicil: {portfoy, ...}} → sadece belirtilen portföylerde sayılmaz
+    istisna_global: set = set()
+    istisna_pf: dict[str, set] = {}
     if "Istisna" in sheets:
         ist = sheets["Istisna"].copy()
         ist.columns = [str(c).strip() for c in ist.columns]
         if "Sicil" in ist.columns:
-            istisna_siciller = set(ist["Sicil"].apply(_cs).dropna())
-            istisna_siciller.discard("")
+            for _, row in ist.iterrows():
+                sicil = _cs(row["Sicil"])
+                if not sicil:
+                    continue
+                portfoy = _cs(row.get("Portfoy", "")) if "Portfoy" in ist.columns else ""
+                if portfoy:
+                    istisna_pf.setdefault(sicil, set()).add(portfoy)
+                else:
+                    istisna_global.add(sicil)
 
     hiz = sheets["Sicil_Hiz_Gun"].copy()
     hiz.columns = [str(c).strip() for c in hiz.columns]
@@ -191,11 +201,14 @@ def _hesapla_kpi(sheets: dict) -> dict:
     pf_siciller: dict[str, list] = {}
     pf_destek_sayisi: dict[str, int] = {}
     for _, row in ic_atamalik.iterrows():
-        if row["Sicil"] in istisna_siciller:
+        sicil, pf = row["Sicil"], row["Portfoy"]
+        if sicil in istisna_global:
             continue
-        pf_siciller.setdefault(row["Portfoy"], []).append(row["Sicil"])
+        if pf in istisna_pf.get(sicil, set()):
+            continue
+        pf_siciller.setdefault(pf, []).append(sicil)
         if row["Portfoy Seviyesi"] == "DESTEK":
-            pf_destek_sayisi[row["Portfoy"]] = pf_destek_sayisi.get(row["Portfoy"], 0) + 1
+            pf_destek_sayisi[pf] = pf_destek_sayisi.get(pf, 0) + 1
 
     # Sicil bazında toplam çalışma süresi (tüm portföylerin toplamı)
     sicil_toplam = hiz.groupby("Sicil")["Calisma_Suresi_Sn"].sum().to_dict()
