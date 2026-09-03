@@ -24,7 +24,7 @@ SIM_ONCE_PATH = "sample_data/simulasyon_once.xlsx"
 SIM_SONRA_PATH = "sample_data/simulasyon_sonra.xlsx"
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 SHEETS_REQUIRED = ["Atama", "Sicil_Hiz_Gun", "Portfoy_Is_Yuku_Gun"]
-SHEETS_OPTIONAL = ["Havuzda_Bekleme"]
+SHEETS_OPTIONAL = ["Havuzda_Bekleme", "Istisna"]
 
 @st.cache_resource
 def _init_sim_files():
@@ -164,6 +164,15 @@ def _hesapla_kpi(sheets: dict) -> dict:
     atama["Portfoy Seviyesi"] = atama["Portfoy Seviyesi"].apply(_norm_seviye)
     atama = atama[atama["Sicil"] != ""]
 
+    # İstisna sicilleri — DESTEK yetkisi var ama işlem yapmıyor
+    istisna_siciller: set = set()
+    if "Istisna" in sheets:
+        ist = sheets["Istisna"].copy()
+        ist.columns = [str(c).strip() for c in ist.columns]
+        if "Sicil" in ist.columns:
+            istisna_siciller = set(ist["Sicil"].apply(_cs).dropna())
+            istisna_siciller.discard("")
+
     hiz = sheets["Sicil_Hiz_Gun"].copy()
     hiz.columns = [str(c).strip() for c in hiz.columns]
     hiz["Portfoy"] = hiz["Portfoy"].apply(_cs)
@@ -177,11 +186,13 @@ def _hesapla_kpi(sheets: dict) -> dict:
     piy["Gelen_Ref"] = pd.to_numeric(piy["Gelen_Ref"], errors="coerce").fillna(0)
     gelen_ref = dict(zip(piy["Portfoy"], piy["Gelen_Ref"]))
 
-    # Portföy başına atanan siciller (ANA + DESTEK)
+    # Portföy başına atanan siciller (ANA + DESTEK) — istisna siciller hariç
     ic_atamalik = atama[atama["Portfoy Seviyesi"].isin(["ANA", "DESTEK", "GEÇICI", "GECICI"])]
     pf_siciller: dict[str, list] = {}
     pf_destek_sayisi: dict[str, int] = {}
     for _, row in ic_atamalik.iterrows():
+        if row["Sicil"] in istisna_siciller:
+            continue
         pf_siciller.setdefault(row["Portfoy"], []).append(row["Sicil"])
         if row["Portfoy Seviyesi"] == "DESTEK":
             pf_destek_sayisi[row["Portfoy"]] = pf_destek_sayisi.get(row["Portfoy"], 0) + 1
