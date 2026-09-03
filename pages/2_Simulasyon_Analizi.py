@@ -262,7 +262,7 @@ def _hesapla_kpi(sheets: dict) -> dict:
                     oran = (row["toplam_gelen"] - row["toplam_baslanan"]) / row["toplam_gelen"]
                     pf_bekleme_oran[pf] = max(0.0, oran)
 
-    # Mesai sonuna sarkan ref ve aktif sicil (17:00 satırı)
+    # Mesai sonuna sarkan ref ve aktif sicil (17:00 satırı — birden fazla gün varsa medyan al)
     pf_sarkan_ref: dict[str, int] = {}
     pf_sarkan_sicil: dict[str, int] = {}
     if "Havuzda_Bekleme" in sheets:
@@ -274,13 +274,23 @@ def _hesapla_kpi(sheets: dict) -> dict:
             son_saat = hb_son[hb_son["Saat_str"] == "17:00"]
             if son_saat.empty:
                 son_saat = hb_son[hb_son["Saat_str"] == hb_son["Saat_str"].max()]
-            for _, row in son_saat.iterrows():
-                pf = row["Portfoy"]
-                gelen = pd.to_numeric(row.get("Gelen_Ref", 0), errors="coerce") or 0
-                baslanan = pd.to_numeric(row.get("Ayni_Saatte_Baslanan", 0), errors="coerce") or 0
-                aktif = pd.to_numeric(row.get("Aktif_Sicil_Adedi", 0), errors="coerce") or 0
-                pf_sarkan_ref[pf] = pf_sarkan_ref.get(pf, 0) + max(0, int(gelen - baslanan))
-                pf_sarkan_sicil[pf] = pf_sarkan_sicil.get(pf, 0) + int(aktif)
+            if not son_saat.empty:
+                son_saat = son_saat.copy()
+                son_saat["Gelen_Ref"] = pd.to_numeric(son_saat["Gelen_Ref"], errors="coerce").fillna(0)
+                son_saat["Ayni_Saatte_Baslanan"] = pd.to_numeric(son_saat.get("Ayni_Saatte_Baslanan", 0), errors="coerce").fillna(0)
+                son_saat["Aktif_Sicil_Adedi"] = pd.to_numeric(son_saat.get("Aktif_Sicil_Adedi", 0), errors="coerce").fillna(0)
+                son_saat["sarkan"] = (son_saat["Gelen_Ref"] - son_saat["Ayni_Saatte_Baslanan"]).clip(lower=0)
+                # Birden fazla gün varsa portföy başına medyan al
+                grp = son_saat.groupby("Portfoy").agg(
+                    sarkan_ref=("sarkan", "median"),
+                    aktif_sicil=("Aktif_Sicil_Adedi", "median"),
+                ).reset_index()
+                for _, row in grp.iterrows():
+                    pf = row["Portfoy"]
+                    # Aktif sicili atamadaki sicil sayısıyla sınırla
+                    atama_sayisi = len(pf_siciller.get(pf, []))
+                    pf_sarkan_ref[pf] = round(row["sarkan_ref"])
+                    pf_sarkan_sicil[pf] = min(round(row["aktif_sicil"]), atama_sayisi)
 
     # Sicil bazında portföy kırılımı (hangi portföyde ne kadar çalışmış)
     sicil_pf_sure: dict[str, dict[str, float]] = {}
