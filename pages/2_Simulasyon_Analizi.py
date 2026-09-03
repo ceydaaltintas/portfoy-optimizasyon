@@ -140,6 +140,12 @@ if once is None or sonra is None:
 def _cs(s):
     return str(s).strip() if pd.notna(s) else ""
 
+_SEVIYE_MAP = {"1": "ANA", "5": "DESTEK", "2": "GECICI"}
+
+def _norm_seviye(s):
+    v = _cs(s).upper()
+    return _SEVIYE_MAP.get(v, v)
+
 
 def _hesapla_kpi(sheets: dict) -> dict:
     atama = sheets["Atama"].copy()
@@ -155,7 +161,7 @@ def _hesapla_kpi(sheets: dict) -> dict:
         atama = atama.rename(columns={sev_col: "Portfoy Seviyesi"})
     if "Portfoy Seviyesi" not in atama.columns:
         atama["Portfoy Seviyesi"] = ""
-    atama["Portfoy Seviyesi"] = atama["Portfoy Seviyesi"].apply(_cs).str.upper()
+    atama["Portfoy Seviyesi"] = atama["Portfoy Seviyesi"].apply(_norm_seviye)
     atama = atama[atama["Sicil"] != ""]
 
     hiz = sheets["Sicil_Hiz_Gun"].copy()
@@ -641,7 +647,7 @@ if sev_col2 != "Portfoy Seviyesi":
     sonra_atama = sonra_atama.rename(columns={sev_col2: "Portfoy Seviyesi"})
 if "Portfoy Seviyesi" not in sonra_atama.columns:
     sonra_atama["Portfoy Seviyesi"] = ""
-sonra_atama["Portfoy Seviyesi"] = sonra_atama["Portfoy Seviyesi"].apply(_cs).str.upper()
+sonra_atama["Portfoy Seviyesi"] = sonra_atama["Portfoy Seviyesi"].apply(_norm_seviye)
 
 # Sicil → atanan portföyler seti
 sicil_atanan: dict[str, set] = {}
