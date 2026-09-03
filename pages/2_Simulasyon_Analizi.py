@@ -295,7 +295,10 @@ def _hesapla_kpi(sheets: dict) -> dict:
         if "Saat" in hb_son.columns and "Portfoy" in hb_son.columns:
             hb_son["Portfoy"] = hb_son["Portfoy"].apply(_cs)
             hb_son["Saat_str"] = hb_son["Saat"].astype(str).str.strip().str[:5]
-            son_saat = hb_son[hb_son["Saat_str"] == "17:00"]
+            # Granülarite algıla → mesai sonu periyodu
+            yarim_saatlik = hb_son["Saat_str"].str.endswith(":30").any()
+            son_periyot = "17:30" if yarim_saatlik else "18:00"
+            son_saat = hb_son[hb_son["Saat_str"] == son_periyot]
             if son_saat.empty:
                 son_saat = hb_son[hb_son["Saat_str"] == hb_son["Saat_str"].max()]
             if not son_saat.empty:
