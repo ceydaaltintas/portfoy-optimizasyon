@@ -146,7 +146,16 @@ def _hesapla_kpi(sheets: dict) -> dict:
     atama.columns = [str(c).strip() for c in atama.columns]
     atama["Sicil"] = atama["Sicil"].apply(_cs)
     atama["Portfoy"] = atama["Portfoy"].apply(_cs)
-    atama["Portfoy Seviyesi"] = atama["Portfoy Seviyesi"].apply(_cs)
+    # Sütun adı normalize et (Portfoy Seviyesi / Portföy Seviyesi / Seviye varyasyonları)
+    sev_col = next(
+        (c for c in atama.columns if "seviye" in c.lower().replace("ı", "i").replace("ö", "o")),
+        "Portfoy Seviyesi",
+    )
+    if sev_col != "Portfoy Seviyesi":
+        atama = atama.rename(columns={sev_col: "Portfoy Seviyesi"})
+    if "Portfoy Seviyesi" not in atama.columns:
+        atama["Portfoy Seviyesi"] = ""
+    atama["Portfoy Seviyesi"] = atama["Portfoy Seviyesi"].apply(_cs).str.upper()
     atama = atama[atama["Sicil"] != ""]
 
     hiz = sheets["Sicil_Hiz_Gun"].copy()
@@ -163,7 +172,7 @@ def _hesapla_kpi(sheets: dict) -> dict:
     gelen_ref = dict(zip(piy["Portfoy"], piy["Gelen_Ref"]))
 
     # Portföy başına atanan siciller (ANA + DESTEK)
-    ic_atamalik = atama[atama["Portfoy Seviyesi"].isin(["ANA", "DESTEK"])]
+    ic_atamalik = atama[atama["Portfoy Seviyesi"].isin(["ANA", "DESTEK", "GEÇICI", "GECICI"])]
     pf_siciller: dict[str, list] = {}
     pf_destek_sayisi: dict[str, int] = {}
     for _, row in ic_atamalik.iterrows():
@@ -273,6 +282,13 @@ once_kpi = _hesapla_kpi(once)
 sonra_kpi = _hesapla_kpi(sonra)
 
 tum_pf = sorted(set(once_kpi["pf_siciller"]) | set(sonra_kpi["pf_siciller"]))
+
+if not tum_pf:
+    st.error(
+        "Atama verisi okunamadı — 'Portfoy Seviyesi' sütununda ANA/DESTEK değerleri bulunamadı. "
+        "Lütfen sütun adını ve değerlerini (büyük/küçük harf, boşluk) kontrol edin."
+    )
+    st.stop()
 
 # ── OKUMA KILAVUZU ────────────────────────────────────────────────────────────
 with st.expander("Metrikler nasıl okunur?", expanded=False):
@@ -617,12 +633,20 @@ sonra_atama = sonra["Atama"].copy()
 sonra_atama.columns = [str(c).strip() for c in sonra_atama.columns]
 sonra_atama["Sicil"] = sonra_atama["Sicil"].apply(_cs)
 sonra_atama["Portfoy"] = sonra_atama["Portfoy"].apply(_cs)
-sonra_atama["Portfoy Seviyesi"] = sonra_atama["Portfoy Seviyesi"].apply(_cs)
+sev_col2 = next(
+    (c for c in sonra_atama.columns if "seviye" in c.lower().replace("ı", "i").replace("ö", "o")),
+    "Portfoy Seviyesi",
+)
+if sev_col2 != "Portfoy Seviyesi":
+    sonra_atama = sonra_atama.rename(columns={sev_col2: "Portfoy Seviyesi"})
+if "Portfoy Seviyesi" not in sonra_atama.columns:
+    sonra_atama["Portfoy Seviyesi"] = ""
+sonra_atama["Portfoy Seviyesi"] = sonra_atama["Portfoy Seviyesi"].apply(_cs).str.upper()
 
 # Sicil → atanan portföyler seti
 sicil_atanan: dict[str, set] = {}
 for _, row in sonra_atama.iterrows():
-    if row["Sicil"] and row["Portfoy Seviyesi"] in ("ANA", "DESTEK"):
+    if row["Sicil"] and row["Portfoy Seviyesi"] in ("ANA", "DESTEK", "GEÇICI", "GECICI"):
         sicil_atanan.setdefault(row["Sicil"], set()).add(row["Portfoy"])
 
 # Sicil → gerçekte çalışılan portföyler (Sicil_Hiz_Gun)
