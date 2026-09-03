@@ -309,7 +309,7 @@ def _hesapla_kpi(sheets: dict) -> dict:
 once_kpi = _hesapla_kpi(once)
 sonra_kpi = _hesapla_kpi(sonra)
 
-tum_pf = sorted(set(once_kpi["pf_siciller"]) | set(sonra_kpi["pf_siciller"]))
+tum_pf = sorted(set(once_kpi["gelen_ref"]) | set(sonra_kpi["gelen_ref"]))
 
 if not tum_pf:
     st.error(
