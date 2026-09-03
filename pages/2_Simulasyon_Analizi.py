@@ -201,7 +201,7 @@ def _hesapla_kpi(sheets: dict) -> dict:
     pf_siciller: dict[str, list] = {}
     pf_destek_sayisi: dict[str, int] = {}
     for _, row in ic_atamalik.iterrows():
-        sicil, pf = row["Sicil"], row["Portfoy"]
+        sicil, pf = _cs(row["Sicil"]), _cs(row["Portfoy"])
         if sicil in istisna_global:
             continue
         if pf in istisna_pf.get(sicil, set()):
