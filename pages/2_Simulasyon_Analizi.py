@@ -140,6 +140,15 @@ if once is None or sonra is None:
 def _cs(s):
     return str(s).strip() if pd.notna(s) else ""
 
+def _sicil(s):
+    """Sicil numarasını tutarlı stringe çevirir: 12345.0 → '12345', '12345' → '12345'."""
+    if pd.isna(s):
+        return ""
+    try:
+        return str(int(float(s))).strip()
+    except (ValueError, TypeError):
+        return str(s).strip()
+
 _SEVIYE_MAP = {"1": "ANA", "5": "DESTEK", "2": "GECICI"}
 
 def _norm_seviye(s):
@@ -150,7 +159,7 @@ def _norm_seviye(s):
 def _hesapla_kpi(sheets: dict) -> dict:
     atama = sheets["Atama"].copy()
     atama.columns = [str(c).strip() for c in atama.columns]
-    atama["Sicil"] = atama["Sicil"].apply(_cs)
+    atama["Sicil"] = atama["Sicil"].apply(_sicil)
     atama["Portfoy"] = atama["Portfoy"].apply(_cs)
     # Sütun adı normalize et (Portfoy Seviyesi / Portföy Seviyesi / Seviye varyasyonları)
     sev_col = next(
@@ -174,7 +183,7 @@ def _hesapla_kpi(sheets: dict) -> dict:
         ist.columns = [str(c).strip() for c in ist.columns]
         if "Sicil" in ist.columns:
             for _, row in ist.iterrows():
-                sicil = _cs(row["Sicil"])
+                sicil = _sicil(row["Sicil"])
                 if not sicil:
                     continue
                 portfoy = _cs(row.get("Portfoy", "")) if "Portfoy" in ist.columns else ""
@@ -186,7 +195,7 @@ def _hesapla_kpi(sheets: dict) -> dict:
     hiz = sheets["Sicil_Hiz_Gun"].copy()
     hiz.columns = [str(c).strip() for c in hiz.columns]
     hiz["Portfoy"] = hiz["Portfoy"].apply(_cs)
-    hiz["Sicil"] = hiz["Sicil"].apply(_cs)
+    hiz["Sicil"] = hiz["Sicil"].apply(_sicil)
     hiz["Calisma_Suresi_Sn"] = pd.to_numeric(hiz["Calisma_Suresi_Sn"], errors="coerce").fillna(0)
     hiz["Referans_Adedi"] = pd.to_numeric(hiz["Referans_Adedi"], errors="coerce").fillna(0)
 
@@ -735,7 +744,7 @@ st.caption(
 # Sonra günü: her sicil için atanan vs gerçekte çalışılan portföyler
 sonra_atama = sonra["Atama"].copy()
 sonra_atama.columns = [str(c).strip() for c in sonra_atama.columns]
-sonra_atama["Sicil"] = sonra_atama["Sicil"].apply(_cs)
+sonra_atama["Sicil"] = sonra_atama["Sicil"].apply(_sicil)
 sonra_atama["Portfoy"] = sonra_atama["Portfoy"].apply(_cs)
 sev_col2 = next(
     (c for c in sonra_atama.columns if "seviye" in c.lower().replace("ı", "i").replace("ö", "o")),
