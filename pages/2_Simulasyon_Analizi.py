@@ -252,6 +252,26 @@ def _hesapla_kpi(sheets: dict) -> dict:
                     oran = (row["toplam_gelen"] - row["toplam_baslanan"]) / row["toplam_gelen"]
                     pf_bekleme_oran[pf] = max(0.0, oran)
 
+    # Mesai sonuna sarkan ref ve aktif sicil (17:00 satırı)
+    pf_sarkan_ref: dict[str, int] = {}
+    pf_sarkan_sicil: dict[str, int] = {}
+    if "Havuzda_Bekleme" in sheets:
+        hb_son = sheets["Havuzda_Bekleme"].copy()
+        hb_son.columns = [str(c).strip() for c in hb_son.columns]
+        if "Saat" in hb_son.columns and "Portfoy" in hb_son.columns:
+            hb_son["Portfoy"] = hb_son["Portfoy"].apply(_cs)
+            hb_son["Saat_str"] = hb_son["Saat"].astype(str).str.strip().str[:5]
+            son_saat = hb_son[hb_son["Saat_str"] == "17:00"]
+            if son_saat.empty:
+                son_saat = hb_son[hb_son["Saat_str"] == hb_son["Saat_str"].max()]
+            for _, row in son_saat.iterrows():
+                pf = row["Portfoy"]
+                gelen = pd.to_numeric(row.get("Gelen_Ref", 0), errors="coerce") or 0
+                baslanan = pd.to_numeric(row.get("Ayni_Saatte_Baslanan", 0), errors="coerce") or 0
+                aktif = pd.to_numeric(row.get("Aktif_Sicil_Adedi", 0), errors="coerce") or 0
+                pf_sarkan_ref[pf] = pf_sarkan_ref.get(pf, 0) + max(0, int(gelen - baslanan))
+                pf_sarkan_sicil[pf] = pf_sarkan_sicil.get(pf, 0) + int(aktif)
+
     # Sicil bazında portföy kırılımı (hangi portföyde ne kadar çalışmış)
     sicil_pf_sure: dict[str, dict[str, float]] = {}
     for _, row in hiz.iterrows():
@@ -281,6 +301,8 @@ def _hesapla_kpi(sheets: dict) -> dict:
         "yuk_std": yuk_std,
         "pf_ilk_temas": pf_ilk_temas,
         "pf_bekleme_oran": pf_bekleme_oran,
+        "pf_sarkan_ref": pf_sarkan_ref,
+        "pf_sarkan_sicil": pf_sarkan_sicil,
     }
 
 
@@ -366,6 +388,19 @@ if once_bk is not None and sonra_bk is not None:
               help="(Gelen - Aynı Saatte Başlanan) / Gelen. Düşük = daha az bekleme")
 else:
     m4.metric("Ort. Bekleyen Ref Oranı", "—", help="Havuzda_Bekleme sheetiyle hesaplanır")
+
+once_sark_ref = sum(once_kpi["pf_sarkan_ref"].values())
+sonra_sark_ref = sum(sonra_kpi["pf_sarkan_ref"].values())
+once_sark_sic = sum(once_kpi["pf_sarkan_sicil"].values())
+sonra_sark_sic = sum(sonra_kpi["pf_sarkan_sicil"].values())
+if once_sark_ref or sonra_sark_ref:
+    ms1, ms2 = st.columns(2)
+    ms1.metric("Mesai Sonu Sarkan Ref (Toplam)", f"{sonra_sark_ref}",
+               f"{sonra_sark_ref - once_sark_ref:+d}", delta_color="inverse",
+               help="17:00 saatinde başlanamamış ref adedi. Düşük = daha az taşma")
+    ms2.metric("Mesai Sonu Aktif Kişi (Toplam)", f"{sonra_sark_sic}",
+               f"{sonra_sark_sic - once_sark_sic:+d}", delta_color="inverse",
+               help="17:00 saatinde hâlâ çalışan sicil adedi. Havuzda_Bekleme'den")
 
 # ── YORUM ─────────────────────────────────────────────────────────────────────
 st.divider()
@@ -458,6 +493,10 @@ for pf in tum_pf:
     s_temas = sonra_kpi["pf_ilk_temas"].get(pf)
     o_bk = once_kpi["pf_bekleme_oran"].get(pf)
     s_bk = sonra_kpi["pf_bekleme_oran"].get(pf)
+    o_sark_ref = once_kpi["pf_sarkan_ref"].get(pf)
+    s_sark_ref = sonra_kpi["pf_sarkan_ref"].get(pf)
+    o_sark_sic = once_kpi["pf_sarkan_sicil"].get(pf)
+    s_sark_sic = sonra_kpi["pf_sarkan_sicil"].get(pf)
 
     row = {
         "Portföy": pf,
@@ -479,6 +518,14 @@ for pf in tum_pf:
     if o_bk is not None or s_bk is not None:
         row["Önce Bekleme %"] = round(o_bk * 100, 1) if o_bk is not None else "—"
         row["Sonra Bekleme %"] = round(s_bk * 100, 1) if s_bk is not None else "—"
+    if o_sark_ref is not None or s_sark_ref is not None:
+        row["Önce Sarkan Ref"] = o_sark_ref if o_sark_ref is not None else "—"
+        row["Sonra Sarkan Ref"] = s_sark_ref if s_sark_ref is not None else "—"
+        δ_sark = (s_sark_ref or 0) - (o_sark_ref or 0)
+        row["Δ Sarkan Ref"] = δ_sark
+    if o_sark_sic is not None or s_sark_sic is not None:
+        row["Önce Sarkan Kişi"] = o_sark_sic if o_sark_sic is not None else "—"
+        row["Sonra Sarkan Kişi"] = s_sark_sic if s_sark_sic is not None else "—"
     rows.append(row)
 
 df = pd.DataFrame(rows)
