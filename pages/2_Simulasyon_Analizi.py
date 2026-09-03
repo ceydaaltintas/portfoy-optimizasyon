@@ -221,7 +221,13 @@ def _hesapla_kpi(sheets: dict) -> dict:
         kap = pf_kapasite.get(pf, 0.0)
         pf_karsilama[pf] = kap / talep if talep > 0 else 0.0
 
-    # Sicil yük dağılımı (std sapma — düşük = dengeli)
+    # Portföy özelinde sicil yük dengesi (her portföydeki sicillerin std sapması)
+    pf_yuk_std: dict[str, float] = {}
+    for pf in pf_siciller:
+        sureler = hiz[hiz["Portfoy"] == pf]["Calisma_Suresi_Sn"].dropna()
+        pf_yuk_std[pf] = float(sureler.std()) if len(sureler) > 1 else 0.0
+
+    # Genel yük dengesi (tüm sicillerin toplam süresi üzerinden)
     sicil_sure_list = list(sicil_toplam.values())
     yuk_std = pd.Series(sicil_sure_list).std() if len(sicil_sure_list) > 1 else 0.0
 
@@ -303,6 +309,7 @@ def _hesapla_kpi(sheets: dict) -> dict:
         "pf_bekleme_oran": pf_bekleme_oran,
         "pf_sarkan_ref": pf_sarkan_ref,
         "pf_sarkan_sicil": pf_sarkan_sicil,
+        "pf_yuk_std": pf_yuk_std,
     }
 
 
@@ -497,6 +504,8 @@ for pf in tum_pf:
     s_sark_ref = sonra_kpi["pf_sarkan_ref"].get(pf)
     o_sark_sic = once_kpi["pf_sarkan_sicil"].get(pf)
     s_sark_sic = sonra_kpi["pf_sarkan_sicil"].get(pf)
+    o_yuk = once_kpi["pf_yuk_std"].get(pf)
+    s_yuk = sonra_kpi["pf_yuk_std"].get(pf)
 
     row = {
         "Portföy": pf,
@@ -526,6 +535,10 @@ for pf in tum_pf:
     if o_sark_sic is not None or s_sark_sic is not None:
         row["Önce Sarkan Kişi"] = o_sark_sic if o_sark_sic is not None else "—"
         row["Sonra Sarkan Kişi"] = s_sark_sic if s_sark_sic is not None else "—"
+    if o_yuk is not None or s_yuk is not None:
+        row["Önce Yük Dengesi (dk)"] = round(o_yuk / 60) if o_yuk else 0
+        row["Sonra Yük Dengesi (dk)"] = round(s_yuk / 60) if s_yuk else 0
+        row["Δ Yük Dengesi"] = round(((s_yuk or 0) - (o_yuk or 0)) / 60)
     rows.append(row)
 
 df = pd.DataFrame(rows)
