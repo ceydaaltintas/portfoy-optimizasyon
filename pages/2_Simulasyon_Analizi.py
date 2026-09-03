@@ -663,7 +663,9 @@ disi_rows = []
 pf_disi_katki: dict[str, float] = {}  # portföy bazında optimizer dışı toplam katki
 
 for sicil, pf_sureler in sicil_gercek.items():
-    atanan = sicil_atanan.get(sicil, set())
+    if sicil not in sicil_atanan:
+        continue  # atama sheetinde olmayan siciller kapsam dışı
+    atanan = sicil_atanan[sicil]
     for pf, sure in pf_sureler.items():
         if pf not in atanan and sure > 0:
             disi_rows.append({
