@@ -315,16 +315,10 @@ def _hesapla_kpi(sheets: dict) -> dict:
                 for _, row in grp.iterrows():
                     pf = row["Portfoy"]
                     atama_sayisi = len(pf_siciller.get(pf, []))
-                    pf_sarkan_ref[pf] = round(row["sarkan_ref"])
-                    pf_sarkan_sicil[pf] = min(round(row["aktif_sicil"]), atama_sayisi)
-
-    # Özet için unique sarkan sicil: sarkan refi olan portföylerde Sicil_Hiz_Gun'da fiilen çalışmış atanmış siciller
-    sarkan_uniq: set = set()
-    for pf, sark_ref in pf_sarkan_ref.items():
-        if sark_ref > 0:
-            atananlar = set(pf_siciller.get(pf, []))
-            calisanlar = set(hiz[hiz["Portfoy"] == pf]["Sicil"].unique())
-            sarkan_uniq.update(atananlar & calisanlar)
+                    sark_ref = round(row["sarkan_ref"])
+                    pf_sarkan_ref[pf] = sark_ref
+                    # Aktif sicil sayısını sadece gerçekten sarkan ref olan portföylerde say
+                    pf_sarkan_sicil[pf] = min(round(row["aktif_sicil"]), atama_sayisi) if sark_ref > 0 else 0
 
     # Sicil bazında portföy kırılımı (hangi portföyde ne kadar çalışmış)
     sicil_pf_sure: dict[str, dict[str, float]] = {}
@@ -357,7 +351,6 @@ def _hesapla_kpi(sheets: dict) -> dict:
         "pf_bekleme_oran": pf_bekleme_oran,
         "pf_sarkan_ref": pf_sarkan_ref,
         "pf_sarkan_sicil": pf_sarkan_sicil,
-        "sarkan_uniq": sarkan_uniq,
         "pf_yuk_std": pf_yuk_std,
         "pf_kapasite_disi": pf_kapasite_disi,
     }
@@ -449,8 +442,8 @@ else:
 once_sark_ref = sum(once_kpi["pf_sarkan_ref"].values())
 sonra_sark_ref = sum(sonra_kpi["pf_sarkan_ref"].values())
 
-once_sark_sic = len(once_kpi["sarkan_uniq"])
-sonra_sark_sic = len(sonra_kpi["sarkan_uniq"])
+once_sark_sic = sum(once_kpi["pf_sarkan_sicil"].values())
+sonra_sark_sic = sum(sonra_kpi["pf_sarkan_sicil"].values())
 if once_sark_ref or sonra_sark_ref:
     ms1, ms2 = st.columns(2)
     ms1.metric("Mesai Sonu Sarkan Ref (Toplam)", f"{sonra_sark_ref}",
