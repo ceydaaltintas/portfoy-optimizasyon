@@ -127,7 +127,7 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
 
     GUN_SN = gun_kapasite_sn(saatlik_mola_dk, ogle_arasi_dk)
     # capacity Sicil_Hiz işlendikten sonra güncellenecek; şimdilik saat bloğuyla başlat
-    capacity: dict[str, float] = {s: float(GUN_SN - gecici_blok_saat.get(s, 0)) for s in tum_siciller}
+    capacity: dict[str, float] = {s: float(max(0, GUN_SN - gecici_blok_saat.get(s, 0))) for s in tum_siciller}
 
     ana_atama_mevcut: dict[str, str] = {}
     for _, row in ana_df.iterrows():
@@ -331,7 +331,7 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
                 )
                 gercek_toplam += max(0, pf_saat)
         if herhangi_gercek:
-            capacity[s] = float(GUN_SN - gercek_toplam)
+            capacity[s] = float(max(0, GUN_SN - gercek_toplam))
 
     # ── Sicil toplam günlük çalışma süresi ───────────────────────────────────
     sicil_toplam_sure: dict[str, float] = {}
