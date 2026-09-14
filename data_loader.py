@@ -13,6 +13,19 @@ def gun_kapasite_sn(saatlik_mola_dk: int = 5, ogle_arasi_dk: int = 45) -> int:
     return max(0, (brut_dk - mola_dk - ogle_arasi_dk) * 60)
 
 
+def _merge_intervals(intervals: list[tuple]) -> list[tuple]:
+    """Örtüşen/bitişik aralıkların union'ını döner."""
+    if not intervals:
+        return []
+    merged: list[list] = []
+    for bas, bit in sorted(intervals):
+        if not merged or bas > merged[-1][1]:
+            merged.append([bas, bit])
+        else:
+            merged[-1][1] = max(merged[-1][1], bit)
+    return [(b, e) for b, e in merged]
+
+
 def _parse_hhmm(val) -> int:
     if pd.isna(val) or str(val).strip() == "":
         return 0
@@ -85,26 +98,32 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     if hatalar:
         return {}, uyarilar, hatalar
 
-    # GEÇİCİ bloklar → saat bloğundan fallback süre
-    gecici_blok_saat: dict[str, int] = {}
-    gecici_pf_per_sicil: dict[str, list] = {}   # hangi sicil hangi GEÇİCİ portföylere gidiyor
-    sicil_gecici_pencere: dict[str, list] = {}  # sicil → [(bas_dk, bit_dk), ...]
+    # GEÇİCİ bloklar — önce ham pencereleri topla, sonra union al (aynı saat farklı portföy dedup)
+    _ham_pencere: dict[str, list] = {}  # sicil → ham (bas, bit) listesi
+    gecici_pf_per_sicil: dict[str, list] = {}
     for _, row in gecici_df.iterrows():
         s, pf = row["Sicil"], row["Portfoy"]
         bas = _parse_hhmm(row["Baslangic Zamani"])
         bit = _parse_hhmm(row["Bitis Zamani"])
-        blok = bit - bas
-        gecici_blok_saat[s] = gecici_blok_saat.get(s, 0) + max(0, blok)
         gecici_pf_per_sicil.setdefault(s, []).append(pf)
         if bas < bit:
-            sicil_gecici_pencere.setdefault(s, []).append((bas, bit))
+            _ham_pencere.setdefault(s, []).append((bas, bit))
 
-    # Portföy ANA grubu GECİCİ pencereleri (DESTEK çakışma penaltisi için)
-    pf_ana_gecici: dict[str, list] = {}
+    # Union alınmış pencerelerden blok süresi ve temiz pencere listesi
+    gecici_blok_saat: dict[str, int] = {}
+    sicil_gecici_pencere: dict[str, list] = {}
+    for s, pencereler in _ham_pencere.items():
+        merged = _merge_intervals(pencereler)
+        sicil_gecici_pencere[s] = merged
+        gecici_blok_saat[s] = sum(bit - bas for bas, bit in merged)
+
+    # Portföy ANA grubu GECİCİ pencereleri (DESTEK çakışma penaltisi için) — yine union al
+    _pf_ana_ham: dict[str, list] = {}
     for _, row in ana_df.iterrows():
         sicil, pf = row["Sicil"], row["Portfoy"]
         for pencere in sicil_gecici_pencere.get(sicil, []):
-            pf_ana_gecici.setdefault(pf, []).append(pencere)
+            _pf_ana_ham.setdefault(pf, []).append(pencere)
+    pf_ana_gecici: dict[str, list] = {pf: _merge_intervals(p) for pf, p in _pf_ana_ham.items()}
 
     GUN_SN = gun_kapasite_sn(saatlik_mola_dk, ogle_arasi_dk)
     # capacity Sicil_Hiz işlendikten sonra güncellenecek; şimdilik saat bloğuyla başlat
