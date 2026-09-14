@@ -26,6 +26,8 @@ def optimize(
     sicil_portfoy_sure: dict[tuple, float] = data.get("sicil_portfoy_sure", {})
     portfoy_sicil_sure: dict[str, float] = data.get("portfoy_sicil_sure", {})
     sicil_toplam_sure: dict[str, float] = data.get("sicil_toplam_sure", {})
+    sicil_gecici_pencere: dict[str, list] = data.get("sicil_gecici_pencere", {})
+    pf_ana_gecici: dict[str, list] = data.get("pf_ana_gecici", {})
 
     solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=120, gapRel=0.05)
 
@@ -204,6 +206,26 @@ def optimize(
     n_pf = max(len(ic_pf), 1)
     hiz_dengesi_penalty = pulp.lpSum(fark_pos[pf] + fark_neg[pf] for pf in ic_pf) / n_pf
 
+    # GECİCİ çakışma penaltisi: DESTEK sicilinin GECİCİ saati portföyün ANA grubunun
+    # GECİCİ saatiyle örtüşüyorsa o atama penalize edilir (soft constraint)
+    def _cakisma_dk(p1, p2):
+        return sum(max(0, min(a_bit, b_bit) - max(a_bas, b_bas)) for a_bas, a_bit in p1 for b_bas, b_bit in p2)
+
+    gecici_ceza_katsayi: dict[tuple, float] = {}
+    for (u, pf) in destek_elig:
+        u_pencere = sicil_gecici_pencere.get(u, [])
+        pf_pencere = pf_ana_gecici.get(pf, [])
+        if u_pencere and pf_pencere:
+            cakisma = _cakisma_dk(u_pencere, pf_pencere)
+            toplam_ana = sum(bit - bas for bas, bit in pf_pencere)
+            gecici_ceza_katsayi[(u, pf)] = cakisma / max(toplam_ana, 1)
+        else:
+            gecici_ceza_katsayi[(u, pf)] = 0.0
+
+    gecici_ceza = 0.05 * pulp.lpSum(
+        gecici_ceza_katsayi[(u, pf)] * y[(u, pf)] for (u, pf) in destek_elig
+    )
+
     # Admin siciller DESTEK'te son tercih: eşit coverage durumunda agent önde gelsin
     if rol_map:
         admin_elig_list = [(u, pf) for (u, pf) in destek_elig if rol_map.get(u) == "8991"]
@@ -215,7 +237,7 @@ def optimize(
     else:
         admin_ceza = 0
 
-    model_d += hiz_agirlik * Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza
+    model_d += hiz_agirlik * Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza
     model_d.solve(solver)
     durum_destek = pulp.LpStatus[model_d.status]
 

@@ -88,11 +88,23 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     # GEÇİCİ bloklar → saat bloğundan fallback süre
     gecici_blok_saat: dict[str, int] = {}
     gecici_pf_per_sicil: dict[str, list] = {}   # hangi sicil hangi GEÇİCİ portföylere gidiyor
+    sicil_gecici_pencere: dict[str, list] = {}  # sicil → [(bas_dk, bit_dk), ...]
     for _, row in gecici_df.iterrows():
         s, pf = row["Sicil"], row["Portfoy"]
-        blok = _parse_hhmm(row["Bitis Zamani"]) - _parse_hhmm(row["Baslangic Zamani"])
+        bas = _parse_hhmm(row["Baslangic Zamani"])
+        bit = _parse_hhmm(row["Bitis Zamani"])
+        blok = bit - bas
         gecici_blok_saat[s] = gecici_blok_saat.get(s, 0) + max(0, blok)
         gecici_pf_per_sicil.setdefault(s, []).append(pf)
+        if bas < bit:
+            sicil_gecici_pencere.setdefault(s, []).append((bas, bit))
+
+    # Portföy ANA grubu GECİCİ pencereleri (DESTEK çakışma penaltisi için)
+    pf_ana_gecici: dict[str, list] = {}
+    for _, row in ana_df.iterrows():
+        sicil, pf = row["Sicil"], row["Portfoy"]
+        for pencere in sicil_gecici_pencere.get(sicil, []):
+            pf_ana_gecici.setdefault(pf, []).append(pencere)
 
     GUN_SN = gun_kapasite_sn(saatlik_mola_dk, ogle_arasi_dk)
     # capacity Sicil_Hiz işlendikten sonra güncellenecek; şimdilik saat bloğuyla başlat
@@ -433,4 +445,6 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         "sicil_toplam_sure": sicil_toplam_sure,
         "portfoy_destek_avg": portfoy_destek_avg,
         "mevcut_atama_raw": mevcut_atama_raw,
+        "sicil_gecici_pencere": sicil_gecici_pencere,
+        "pf_ana_gecici": pf_ana_gecici,
     }, uyarilar, hatalar
