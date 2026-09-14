@@ -78,10 +78,13 @@ def optimize(
             if pulp.value(a[(u, pf)]) is not None and pulp.value(a[(u, pf)]) > 0.5:
                 ana_atama[u] = pf
 
-    # ANA kapasite — Sicil_Hiz'den gerçek katkı
+    # ANA kapasite — Sicil_Hiz'den gerçek katkı (istisna/dışlanan siciller hariç)
+    sicil_aktif = set(tum_siciller)
     ana_kapasite: dict[str, float] = {pf: 0.0 for pf in ic_pf}
     ana_katkisi: dict[str, float] = {}
     for u, pf in ana_atama.items():
+        if u not in sicil_aktif:
+            continue
         contrib = sicil_portfoy_sure.get((u, pf), portfoy_sicil_sure.get(pf, 0.0))
         ana_katkisi[u] = contrib
         if pf in ana_kapasite:
