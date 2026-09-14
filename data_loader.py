@@ -29,7 +29,7 @@ def _merge_intervals(intervals: list[tuple]) -> list[tuple]:
 def _parse_hhmm(val) -> int:
     if pd.isna(val) or str(val).strip() == "":
         return 0
-    m = re.match(r"(\d+):(\d+)", str(val).strip())
+    m = re.search(r"(\d{1,2}):(\d{2})", str(val).strip())
     return int(m.group(1)) * 3600 + int(m.group(2)) * 60 if m else 0
 
 
