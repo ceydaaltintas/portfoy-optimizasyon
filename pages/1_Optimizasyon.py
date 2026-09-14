@@ -224,8 +224,9 @@ with st.expander("Gelişmiş Ayarlar (opsiyonel)", expanded=False):
     )
     hiz_agirlik = st.slider(
         "Hız dengeleme ağırlığı",
-        0.0, 1.0, 0.8, 0.05,
-        help="0 = yalnızca kapasite karşılama, 1 = yalnızca hız dengesi",
+        0.0, 1.0, 0.97, 0.01,
+        help="1 = yalnızca kapasite karşılama (önerilen), 0 = yalnızca hız dengesi. "
+             "Düşük değerler portföy başına DESTEK sayısını gereksiz yere artırabilir.",
     )
     col_b, col_c = st.columns(2)
     max_destek = col_b.number_input("Portföy başına maks. DESTEK sicil", 1, 50, 10)
@@ -336,19 +337,23 @@ with tab1:
         all_s = pf_ana.get(pf, []) + pf_destek.get(pf, [])
         ort_hiz = sum(speed_raw.get(s, 0) for s in all_s) / len(all_s) if all_s else 0
         cov = coverage.get(pf, 0.0)
+        dem = demand.get(pf, 0)
+        ana_kap = ana_kapasite.get(pf, 0)
         rows.append({
             "Portföy": pf,
-            "Günlük Talep (sn)": round(demand.get(pf, 0)),
+            "Günlük Talep (sn)": round(dem),
+            "ANA Kapasite (sn)": round(ana_kap),
+            "ANA Karşılama (%)": round(ana_kap / dem * 100, 1) if dem > 0 else 0,
             "ANA Sicil": len(pf_ana.get(pf, [])),
             "DESTEK Sicil": len(pf_destek.get(pf, [])),
-            "Toplam Kapasite (sn)": round(ana_kapasite.get(pf, 0) + destek_kapasite.get(pf, 0)),
-            "Karşılama Oranı (%)": round(cov * 100, 1),
+            "Toplam Kapasite (sn)": round(ana_kap + destek_kapasite.get(pf, 0)),
+            "Toplam Karşılama (%)": round(cov * 100, 1),
             "Ort. Hız Skoru (sn)": round(ort_hiz),
         })
     df1 = pd.DataFrame(rows)
 
     def _renk_satir(row):
-        oran = row["Karşılama Oranı (%)"]
+        oran = row["Toplam Karşılama (%)"]
         if oran < 50:
             return ["background-color: #FFC7CE"] * len(row)
         elif oran < 80:
@@ -361,7 +366,7 @@ with tab1:
         hide_index=True,
     )
     st.caption("🔴 < %50 | 🟡 %50–80 | ⬜ > %80 karşılama oranı")
-    st.bar_chart(df1.set_index("Portföy")["Karşılama Oranı (%)"], use_container_width=True)
+    st.bar_chart(df1.set_index("Portföy")["Toplam Karşılama (%)"], use_container_width=True)
 
 with tab2:
     st.subheader("Sicil Bazlı Özet")

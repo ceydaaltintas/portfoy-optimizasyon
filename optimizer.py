@@ -25,6 +25,7 @@ def optimize(
     ana_atama_mevcut: dict[str, str] = data["ana_atama_mevcut"]
     sicil_portfoy_sure: dict[tuple, float] = data.get("sicil_portfoy_sure", {})
     portfoy_sicil_sure: dict[str, float] = data.get("portfoy_sicil_sure", {})
+    portfoy_destek_avg: dict[str, float] = data.get("portfoy_destek_avg", {})
     sicil_toplam_sure: dict[str, float] = data.get("sicil_toplam_sure", {})
     sicil_gecici_pencere: dict[str, list] = data.get("sicil_gecici_pencere", {})
     pf_ana_gecici: dict[str, list] = data.get("pf_ana_gecici", {})
@@ -98,6 +99,11 @@ def optimize(
         dem = demand.get(pf, 0.0)
         if dem > 0:
             ratio = ana_kapasite[pf] / dem
+            uyarilar.append(
+                f"[KAPASITE] Portföy '{pf}': talep={round(dem)}sn, "
+                f"ANA kapasite={round(ana_kapasite[pf])}sn, "
+                f"ANA karşılama=%{round(ratio*100,1)}"
+            )
             if ratio > 1.5:
                 uyarilar.append(f"Portföy '{pf}': ANA kapasite talepten %{int((ratio-1)*100)} fazla.")
             elif ratio < 0.5:
@@ -112,7 +118,26 @@ def optimize(
         destek_available[u] = min(max(toplam - ana_pay, 0.0), teorik)
 
     # ── DESTEK KATMANI ────────────────────────────────────────────────────────
-    destek_elig = [(u, pf) for (u, pf) in eligible if pf in ic_pf and (u, pf) not in ana_set]
+    # Sabit katkı modeli: t değişkeni yok.
+    # Her (sicil, portföy) çifti için y=1 → sicil o portföye sabit miktarda kapasite katar.
+    # Katkı = Sicil_Hiz'deki gerçek geçmiş > portföy DESTEK ortalaması > ANA ortalama × 0.30
+    # Bu model, kapasiteyi birden fazla portföye bölerek "küçük katkı × çok sicil" tuzağını önler.
+    _elig_all = [(u, pf) for (u, pf) in eligible if pf in ic_pf and (u, pf) not in ana_set]
+    destek_contrib_fixed: dict[tuple, float] = {}
+    for (u, pf) in _elig_all:
+        avail = destek_available.get(u, 0.0)
+        if avail <= 0:
+            continue
+        hist = sicil_portfoy_sure.get((u, pf), 0.0)
+        if hist > 0:
+            val = hist
+        else:
+            fallback = portfoy_destek_avg.get(pf, portfoy_sicil_sure.get(pf, 0.0) * 0.30)
+            val = fallback
+        if val > 0:
+            destek_contrib_fixed[(u, pf)] = min(val, avail)
+
+    destek_elig = [(u, pf) for (u, pf) in _elig_all if (u, pf) in destek_contrib_fixed]
 
     eff_min: dict[str, int] = {}
     for pf in ic_pf:
@@ -141,23 +166,8 @@ def optimize(
 
     model_d = pulp.LpProblem("DestekAtama", pulp.LpMaximize)
 
-    # y: atama kararı (binary)
-    # t: o portföye fiilen harcanan DESTEK süresi (sürekli, saniye)
     y = {(u, pf): pulp.LpVariable(f"y_{u}_{pf}", cat="Binary") for (u, pf) in destek_elig}
-    t = {(u, pf): pulp.LpVariable(f"t_{u}_{pf}", lowBound=0) for (u, pf) in destek_elig}
     Z_d = pulp.LpVariable("Z_d", lowBound=0, upBound=1)
-
-    # t ancak y=1 ise pozitif olabilir; üst sınır sicilin DESTEK kapasitesi
-    # Alt sınır: atandıysa en az %10 kapasiteyi o portföye ayırmalı (y=1, t=0 atamaları engeller)
-    for (u, pf) in destek_elig:
-        avail = destek_available.get(u, 0.0)
-        if avail > 0:
-            min_katki = avail * 0.10
-            model_d += t[(u, pf)] <= avail * y[(u, pf)]
-            model_d += t[(u, pf)] >= min_katki * y[(u, pf)]
-        else:
-            model_d += t[(u, pf)] == 0
-            model_d += y[(u, pf)] == 0
 
     # Sicil başına max DESTEK portföy sayısı
     for u in tum_siciller:
@@ -165,11 +175,16 @@ def optimize(
         if u_list:
             model_d += pulp.lpSum(y[ud] for ud in u_list) <= max_destek_portfoy
 
-    # Sicil kapasitesi: tüm DESTEK portföylere harcanan toplam süre ≤ destek_available
+    # Sicil kapasitesi: atanan portföylere toplam sabit katkı ≤ destek_available
+    # Bu kısıt, sicil kapasitesinin birçok portföye bölünmesini sınırlayarak gerçekçi atamalar sağlar
     for u in tum_siciller:
         u_list = [(u2, p2) for (u2, p2) in destek_elig if u2 == u]
-        if u_list and destek_available.get(u, 0) > 0:
-            model_d += pulp.lpSum(t[(u2, p2)] for (u2, p2) in u_list) <= destek_available[u]
+        avail = destek_available.get(u, 0.0)
+        if u_list and avail > 0:
+            model_d += (
+                pulp.lpSum(destek_contrib_fixed[(u2, p2)] * y[(u2, p2)] for (u2, p2) in u_list)
+                <= avail
+            )
 
     # Portföy başına min/max DESTEK sicil sayısı
     for pf in ic_pf:
@@ -179,13 +194,14 @@ def optimize(
                 model_d += pulp.lpSum(y[ud] for ud in pf_list) >= eff_min[pf]
             model_d += pulp.lpSum(y[ud] for ud in pf_list) <= max_destek_sicil
 
-    # Kapsama: (ANA kapasite + DESTEK t toplamı) / talep ≥ Z_d
+    # Kapsama: (ANA kapasite + DESTEK sabit katkılar) / talep ≥ Z_d
     for pf in ic_pf:
         pf_list = [(u2, p2) for (u2, p2) in destek_elig if p2 == pf]
         dem = demand.get(pf, 1.0)
         if dem > 0:
             toplam_kap = ana_kapasite.get(pf, 0.0) + (
-                pulp.lpSum(t[ud] for ud in pf_list) if pf_list else 0
+                pulp.lpSum(destek_contrib_fixed[(u2, p2)] * y[(u2, p2)] for (u2, p2) in pf_list)
+                if pf_list else 0
             )
             model_d += Z_d <= toplam_kap / dem
 
@@ -241,7 +257,14 @@ def optimize(
     else:
         admin_ceza = 0
 
-    model_d += hiz_agirlik * Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza
+    # Gereksiz atama cezası: tek bir atamadan kazanılabilecek maksimum denge iyileştirmesinden
+    # biraz büyük tutulur. Bu sayede Z_d doyuma ulaştığında optimizer saf denge için
+    # fazladan sicil atamaz; coverage iyileştirmesi (>= hiz_agirlik * küçük_kazanç) ise
+    # bu cezadan çok daha büyük olduğundan gerçek atamalar engellenmez.
+    atama_ceza_birim = (1 - hiz_agirlik) * 1.05 / n_pf
+    atama_ceza = atama_ceza_birim * pulp.lpSum(y[(u, pf)] for (u, pf) in destek_elig)
+
+    model_d += hiz_agirlik * Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza - atama_ceza
     model_d.solve(solver)
     durum_destek = pulp.LpStatus[model_d.status]
 
@@ -251,9 +274,7 @@ def optimize(
         for (u, pf) in destek_elig:
             if pulp.value(y[(u, pf)]) is not None and pulp.value(y[(u, pf)]) > 0.5:
                 destek_atama.add((u, pf))
-            t_val = pulp.value(t[(u, pf)])
-            if t_val is not None and t_val > 0:
-                destek_kapasite[pf] += t_val
+                destek_kapasite[pf] += destek_contrib_fixed.get((u, pf), 0.0)
     else:
         uyarilar.append(f"DESTEK optimizasyonu: {durum_destek}. Parametreleri kontrol edin.")
 
