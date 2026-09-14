@@ -214,6 +214,14 @@ def create_sample(path: str = "sample_data/ornek_veri.xlsx"):
                 })
     sheet6 = pd.DataFrame(rows6)
 
+    # Sheet 7: Sicil_Rol (opsiyonel) — 8990=agent, 8991=admin
+    # Örnek: ilk 5 sicil admin, geri kalanlar agent
+    admin_siciller = SICILLER[:5]
+    sheet7 = pd.DataFrame([
+        {"Sicil": s, "Rol": "8991" if s in admin_siciller else "8990"}
+        for s in SICILLER
+    ])
+
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
         sheet1.to_excel(writer, sheet_name="Mevcut_Atama", index=False)
         sheet2.to_excel(writer, sheet_name="Portfoy_Is_Yuku", index=False)
@@ -221,6 +229,7 @@ def create_sample(path: str = "sample_data/ornek_veri.xlsx"):
         sheet4.to_excel(writer, sheet_name="Portfoy_Aktif_Sicil", index=False)
         sheet5.to_excel(writer, sheet_name="Istisna", index=False)
         sheet6.to_excel(writer, sheet_name="Havuzda_Bekleme", index=False)
+        sheet7.to_excel(writer, sheet_name="Sicil_Rol", index=False)
 
 
 if __name__ == "__main__":

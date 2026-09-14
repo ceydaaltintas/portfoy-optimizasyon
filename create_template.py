@@ -83,6 +83,10 @@ SHEETS = {
         ],
         "note": "OPSİYONEL. Saatlik portföy bekleme verisi. Doldurulursa yoğun portföylerin talebi otomatik şişirilir. Tarih: GG.AA.YYYY, Saat: HH:MM, süreler saniye cinsinden.",
     },
+    "Sicil_Rol": {
+        "cols": ["Sicil", "Rol"],
+        "note": "OPSİYONEL. Sicil başına rol kodu: 8990=Agent, 8991=Admin. Doldurulursa DESTEK atamasında agent siciller öncelikli, admin siciller yalnızca ihtiyaç halinde atanır.",
+    },
 }
 
 

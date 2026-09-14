@@ -32,7 +32,7 @@ st.caption("Talimat yönetim sistemi — portföy destek ataması optimizasyon a
 st.header("1. Veri Yükleme")
 
 SHEET_NAMES_REQUIRED = ["Mevcut_Atama", "Portfoy_Is_Yuku", "Sicil_Hiz", "Portfoy_Aktif_Sicil", "Istisna"]
-SHEET_NAMES_OPTIONAL = ["Havuzda_Bekleme"]
+SHEET_NAMES_OPTIONAL = ["Havuzda_Bekleme", "Sicil_Rol"]
 SHEET_NAMES = SHEET_NAMES_REQUIRED  # geriye dönük uyumluluk için
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -48,7 +48,7 @@ if mod == "Tek Excel dosyası (.xlsx)":
     uploaded = st.file_uploader(
         "Excel dosyasını yükleyin",
         type=["xlsx"],
-        help="Zorunlu sekmeler: Mevcut_Atama, Portfoy_Is_Yuku, Sicil_Hiz, Portfoy_Aktif_Sicil, Istisna | Opsiyonel: Havuzda_Bekleme",
+        help="Zorunlu sekmeler: Mevcut_Atama, Portfoy_Is_Yuku, Sicil_Hiz, Portfoy_Aktif_Sicil, Istisna | Opsiyonel: Havuzda_Bekleme, Sicil_Rol",
     )
     if uploaded:
         try:
@@ -250,6 +250,18 @@ if submitted:
             st.error(h)
         st.stop()
 
+    # Sicil_Rol sheetinden rol_map oluştur (opsiyonel)
+    rol_map: dict[str, str] = {}
+    if "Sicil_Rol" in raw_sheets:
+        sr = raw_sheets["Sicil_Rol"].copy()
+        sr.columns = [str(c).strip() for c in sr.columns]
+        if "Sicil" in sr.columns and "Rol" in sr.columns:
+            for _, row in sr.iterrows():
+                sicil = str(int(float(row["Sicil"]))).strip() if pd.notna(row["Sicil"]) else ""
+                rol = str(row["Rol"]).strip() if pd.notna(row["Rol"]) else ""
+                if sicil and rol:
+                    rol_map[sicil] = rol
+
     with st.spinner("Optimizasyon çalışıyor, lütfen bekleyin..."):
         try:
             sonuc = optimizer.optimize(
@@ -260,6 +272,7 @@ if submitted:
                 min_destek_sicil=min_destek,
                 max_destek_sicil=max_destek,
                 max_destek_portfoy=max_portfoy,
+                rol_map=rol_map or None,
             )
         except Exception as e:
             st.error(f"Optimizasyon hatası: {e}")

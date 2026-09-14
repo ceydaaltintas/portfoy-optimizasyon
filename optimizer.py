@@ -11,7 +11,10 @@ def optimize(
     min_destek_sicil: int = 0,
     max_destek_sicil: int = 10,
     max_destek_portfoy: int = 5,
+    rol_map: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    # rol_map: {sicil → "8990" (agent) | "8991" (admin)}
+    # Admin siciller DESTEK'te en son tercih edilir (küçük ceza ile)
     uyarilar: list[str] = []
     tum_siciller: list[str] = data["tum_siciller"]
     ic_pf: list[str] = data["ic_portfoyler"]
@@ -198,7 +201,18 @@ def optimize(
     n_pf = max(len(ic_pf), 1)
     hiz_dengesi_penalty = pulp.lpSum(fark_pos[pf] + fark_neg[pf] for pf in ic_pf) / n_pf
 
-    model_d += hiz_agirlik * Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty
+    # Admin siciller DESTEK'te son tercih: eşit coverage durumunda agent önde gelsin
+    if rol_map:
+        admin_elig_list = [(u, pf) for (u, pf) in destek_elig if rol_map.get(u) == "8991"]
+        if admin_elig_list:
+            n_norm = max(len(admin_elig_list), 1)
+            admin_ceza = (0.01 / n_norm) * pulp.lpSum(y[ud] for ud in admin_elig_list)
+        else:
+            admin_ceza = 0
+    else:
+        admin_ceza = 0
+
+    model_d += hiz_agirlik * Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza
     model_d.solve(solver)
     durum_destek = pulp.LpStatus[model_d.status]
 
