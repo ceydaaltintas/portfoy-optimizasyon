@@ -222,7 +222,8 @@ def optimize(
         else:
             gecici_ceza_katsayi[(u, pf)] = 0.0
 
-    gecici_ceza = 0.05 * pulp.lpSum(
+    n_elig = max(len(destek_elig), 1)
+    gecici_ceza = (0.001 / n_elig) * pulp.lpSum(
         gecici_ceza_katsayi[(u, pf)] * y[(u, pf)] for (u, pf) in destek_elig
     )
 
