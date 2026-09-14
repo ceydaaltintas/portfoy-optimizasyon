@@ -224,7 +224,7 @@ with st.expander("Gelişmiş Ayarlar (opsiyonel)", expanded=False):
     )
     hiz_agirlik = st.slider(
         "Hız dengeleme ağırlığı",
-        0.0, 1.0, 0.5, 0.05,
+        0.0, 1.0, 0.8, 0.05,
         help="0 = yalnızca kapasite karşılama, 1 = yalnızca hız dengesi",
     )
     col_b, col_c = st.columns(2)

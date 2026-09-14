@@ -148,10 +148,13 @@ def optimize(
     Z_d = pulp.LpVariable("Z_d", lowBound=0, upBound=1)
 
     # t ancak y=1 ise pozitif olabilir; üst sınır sicilin DESTEK kapasitesi
+    # Alt sınır: atandıysa en az %10 kapasiteyi o portföye ayırmalı (y=1, t=0 atamaları engeller)
     for (u, pf) in destek_elig:
         avail = destek_available.get(u, 0.0)
         if avail > 0:
+            min_katki = avail * 0.10
             model_d += t[(u, pf)] <= avail * y[(u, pf)]
+            model_d += t[(u, pf)] >= min_katki * y[(u, pf)]
         else:
             model_d += t[(u, pf)] == 0
             model_d += y[(u, pf)] == 0
