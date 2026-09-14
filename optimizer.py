@@ -132,12 +132,15 @@ def optimize(
         if hist > 0:
             val = hist
         else:
-            fallback = portfoy_destek_avg.get(pf, portfoy_sicil_sure.get(pf, 0.0) * 0.30)
-            val = fallback
-        if val > 0:
-            destek_contrib_fixed[(u, pf)] = min(val, avail)
+            val = portfoy_destek_avg.get(pf, 0.0)
+            if val <= 0:
+                val = portfoy_sicil_sure.get(pf, 0.0) * 0.30
+            if val <= 0:
+                # Son fallback: sicilin tüm DESTEK kapasitesi bu portföye gider
+                val = avail
+        destek_contrib_fixed[(u, pf)] = min(val, avail)
 
-    destek_elig = [(u, pf) for (u, pf) in _elig_all if (u, pf) in destek_contrib_fixed]
+    destek_elig = [(u, pf) for (u, pf) in _elig_all if destek_available.get(u, 0.0) > 0]
 
     eff_min: dict[str, int] = {}
     for pf in ic_pf:
