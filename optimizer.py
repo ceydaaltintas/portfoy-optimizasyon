@@ -142,10 +142,12 @@ def optimize(
     # fazla kapasiteyi diğer ihtiyaçlı portföylere hiç yönlendirmez).
     Z_d = {pf: pulp.LpVariable(f"Z_d_{pf}", lowBound=0, upBound=1) for pf in ic_pf}
 
+    # Bir DESTEK sicili tek bir portföye kendi boştaki tüm kapasitesini verebilir
+    # (portföyün ortalama kişi payıyla sınırlı değil) — böylece az sayıda müsait
+    # sicil, onlarca farklı kişi aramak yerine açığı tek başına kapatabilir.
     for (u, pf) in destek_elig:
         avail = destek_available.get(u, 0.0)
-        katki_max = min(avail, portfoy_sicil_sure.get(pf, avail))
-        model_d += t[(u, pf)] <= katki_max * y[(u, pf)]
+        model_d += t[(u, pf)] <= avail * y[(u, pf)]
 
     # Sicil toplam DESTEK süresi ≤ destek_available
     for u in tum_siciller:
