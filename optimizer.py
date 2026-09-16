@@ -88,7 +88,7 @@ def optimize(
     for u, pf in ana_atama.items():
         if u not in sicil_aktif:
             continue
-        contrib = sicil_portfoy_sure.get((u, pf), portfoy_sicil_sure.get(pf, 0.0))
+        contrib = portfoy_sicil_sure.get(pf, sicil_portfoy_sure.get((u, pf), 0.0))
         ana_katkisi[u] = contrib
         if pf in ana_kapasite:
             ana_kapasite[pf] += contrib
