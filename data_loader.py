@@ -407,11 +407,20 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
                         f"{len(bekleme_katsayisi)} portföy için talep ağırlığı ayarlandı."
                     )
 
-    # ── Talep: portföydeki aktif sicil sayısı × sicil başına günlük süre ─────
+    # ── Talep: gerçek iş hacmi (referans adedi × referans başı süre) ─────────
+    # Portfoy_Is_Yuku'daki günlük referans adedini kullanır — böylece talep,
+    # o gün gelen talimat hacmine duyarlı olur (tarihsel personel sayısına değil).
+    # Referans verisi olmayan portföyler için (ör. dış/geçici) eski aktif-sicil
+    # bazlı tahmine geri düşülür.
     demand: dict[str, float] = {}
     for pf in tum_portfoyler:
-        aktif = max(portfoy_aktif.get(pf, 1.0), 1.0)
-        demand[pf] = aktif * portfoy_sicil_sure.get(pf, 0.0)
+        refs = portfoy_daily_refs.get(pf, 0.0)
+        sure_per_ref = portfoy_time_per_ref.get(pf, 0.0) or global_time_per_ref
+        if refs > 0 and sure_per_ref > 0:
+            demand[pf] = refs * sure_per_ref
+        else:
+            aktif = max(portfoy_aktif.get(pf, 1.0), 1.0)
+            demand[pf] = aktif * portfoy_sicil_sure.get(pf, 0.0)
 
     # Havuzda_Bekleme katsayısı uygula (varsa)
     if bekleme_katsayisi:

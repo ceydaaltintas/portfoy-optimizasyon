@@ -228,10 +228,13 @@ with st.expander("Gelişmiş Ayarlar (opsiyonel)", expanded=False):
         help="1 = yalnızca kapasite karşılama (önerilen), 0 = yalnızca hız dengesi. "
              "Düşük değerler portföy başına DESTEK sayısını gereksiz yere artırabilir.",
     )
-    col_b, col_c = st.columns(2)
+    col_a, col_b, col_c = st.columns(3)
+    min_destek = col_a.number_input(
+        "Portföy başına min. DESTEK sicil", 0, 20, 0,
+        help="İhtiyaç varsa her portföye en az bu kadar DESTEK sicil atanmaya çalışılır.",
+    )
     max_destek = col_b.number_input("Portföy başına maks. DESTEK sicil", 1, 50, 10)
     max_portfoy = col_c.number_input("Sicil başına maks. DESTEK portföy", 1, 20, 5)
-    min_destek = 0
 
 st.caption("Gelişmiş ayarlar varsayılan değerleriyle kullanılacaktır. Değiştirmek isterseniz genişletin.")
 submitted = st.button("Optimize Et", type="primary", use_container_width=True)

@@ -24,7 +24,6 @@ def optimize(
     ana_atama_mevcut: dict[str, str] = data["ana_atama_mevcut"]
     sicil_portfoy_sure: dict[tuple, float] = data.get("sicil_portfoy_sure", {})
     portfoy_sicil_sure: dict[str, float] = data.get("portfoy_sicil_sure", {})
-    portfoy_aktif: dict[str, float] = data.get("portfoy_aktif", {})
     sicil_gecici_pencere: dict[str, list] = data.get("sicil_gecici_pencere", {})
     pf_ana_gecici: dict[str, list] = data.get("pf_ana_gecici", {})
 
@@ -104,12 +103,14 @@ def optimize(
         destek_available[u] = max(teorik - katki_ana, 0.0)
 
     # ── DESTEK KATMANI ────────────────────────────────────────────────────────
-    # Portföy başına max DESTEK = portfoy_aktif - N_ana (tarihsel ihtiyaç)
+    # Portföy başına max DESTEK = gerçek talep açığını kapatmak için gereken sicil sayısı
+    # (talep - ANA kapasitesi) / kişi başı günlük süre. Tarihsel personel sayısına değil,
+    # o günkü gerçek talep-kapasite açığına dayanır.
     destek_max_pf: dict[str, int] = {}
     for pf in ic_pf:
-        n_ana = len(pf_ana_siciller.get(pf, []))
-        aktif = portfoy_aktif.get(pf, 0.0)
-        needed = max(math.ceil(aktif) - n_ana, 0)
+        kisi_sure = portfoy_sicil_sure.get(pf, 0.0)
+        acik = max(demand.get(pf, 0.0) - ana_kapasite.get(pf, 0.0), 0.0)
+        needed = math.ceil(acik / kisi_sure) if kisi_sure > 0 else 0
         destek_max_pf[pf] = min(needed, max_destek_sicil)
 
     # Uygunluk: DESTEK için boş süresi olan ve ANA olmayan siciller
@@ -258,7 +259,7 @@ def optimize(
 def _coverage(ic_pf, ana_kap, destek_kap, demand):
     return {
         pf: (ana_kap.get(pf, 0) + destek_kap.get(pf, 0)) / demand.get(pf, 1.0)
-        if demand.get(pf, 0) > 0 else 0.0
+        if demand.get(pf, 0) > 0 else 1.0
         for pf in ic_pf
     }
 
