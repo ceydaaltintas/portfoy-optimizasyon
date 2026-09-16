@@ -137,7 +137,10 @@ def optimize(
     y = {(u, pf): pulp.LpVariable(f"y_{u}_{pf}", cat="Binary") for (u, pf) in destek_elig}
     # t: sicil u'nun portföy pf'e katkısı; en fazla portfoy_sicil_sure (bir sicil payı) veya destek_available
     t = {(u, pf): pulp.LpVariable(f"t_{u}_{pf}", lowBound=0) for (u, pf) in destek_elig}
-    Z_d = pulp.LpVariable("Z_d", lowBound=0, upBound=1)
+    # Portföy başına ayrı Z_d[pf]: toplam kapsamayı maksimize eder (tek paylaşılan
+    # değişken kullanılırsa model yalnızca en kötü portföyü iyileştirmeye çalışır ve
+    # fazla kapasiteyi diğer ihtiyaçlı portföylere hiç yönlendirmez).
+    Z_d = {pf: pulp.LpVariable(f"Z_d_{pf}", lowBound=0, upBound=1) for pf in ic_pf}
 
     for (u, pf) in destek_elig:
         avail = destek_available.get(u, 0.0)
@@ -168,7 +171,7 @@ def optimize(
             eff_min = min(min_destek_sicil, len(pf_list))
             model_d += pulp.lpSum(y[ud] for ud in pf_list) >= eff_min
 
-    # Kapsama: (ANA + DESTEK t toplamı) / talep ≥ Z_d
+    # Kapsama: (ANA + DESTEK t toplamı) / talep ≥ Z_d[pf] (portföy başına ayrı)
     for pf in ic_pf:
         pf_list = [(u2, p2) for (u2, p2) in destek_elig if p2 == pf]
         dem = demand.get(pf, 1.0)
@@ -176,7 +179,7 @@ def optimize(
             toplam_kap = ana_kapasite.get(pf, 0.0) + (
                 pulp.lpSum(t[ud] for ud in pf_list) if pf_list else 0
             )
-            model_d += Z_d <= toplam_kap / dem
+            model_d += Z_d[pf] <= toplam_kap / dem
 
     # Hız dengesi
     speeds = sorted(speed_norm.values())
@@ -225,7 +228,8 @@ def optimize(
     else:
         admin_ceza = 0
 
-    model_d += hiz_agirlik * Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza
+    ort_Z_d = pulp.lpSum(Z_d[pf] for pf in ic_pf) / n_pf
+    model_d += hiz_agirlik * ort_Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza
     model_d.solve(solver)
     durum_destek = pulp.LpStatus[model_d.status]
 

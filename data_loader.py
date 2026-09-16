@@ -266,12 +266,16 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
             except Exception:
                 pass
 
-    # portföy bazında ortalama referans başına süre → talep hesabı için
-    pf_ref_sure: dict[str, list] = {pf: [] for pf in ic_pf}
+    # portföy bazında referans başına süre → talep hesabı için
+    # Ağırlıklı ortalama (toplam süre / toplam referans) kullanılır; sicil bazında
+    # oranların ağırlıksız ortalaması alınsaydı az referanslı/aykırı tek bir sicil
+    # tüm portföyün ortalamasını anlamsızca şişirebilirdi.
+    pf_toplam_sure: dict[str, float] = {pf: 0.0 for pf in ic_pf}
+    pf_toplam_ref: dict[str, float] = {pf: 0.0 for pf in ic_pf}
     if hiz_col and sh_ref_col:
         for _, row in sh.iterrows():
             s, pf = row["Sicil"], row["Portfoy"]
-            if pf not in pf_ref_sure:
+            if pf not in pf_toplam_sure:
                 continue
             sure = sicil_portfoy_sure.get((s, pf), 0.0)
             try:
@@ -279,15 +283,15 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
             except Exception:
                 refs = 0.0
             if refs > 0 and sure > 0:
-                pf_ref_sure[pf].append(sure / refs)
+                pf_toplam_sure[pf] += sure
+                pf_toplam_ref[pf] += refs
     portfoy_time_per_ref: dict[str, float] = {
-        pf: sum(v) / len(v) if v else 0.0
-        for pf, v in pf_ref_sure.items()
+        pf: pf_toplam_sure[pf] / pf_toplam_ref[pf] if pf_toplam_ref[pf] > 0 else 0.0
+        for pf in ic_pf
     }
-    global_time_per_ref = (
-        sum(portfoy_time_per_ref.values()) / len([v for v in portfoy_time_per_ref.values() if v > 0])
-        if any(v > 0 for v in portfoy_time_per_ref.values()) else 0.0
-    )
+    toplam_sure_genel = sum(pf_toplam_sure.values())
+    toplam_ref_genel = sum(pf_toplam_ref.values())
+    global_time_per_ref = toplam_sure_genel / toplam_ref_genel if toplam_ref_genel > 0 else 0.0
 
     speed_raw: dict[str, float] = {}
     if hiz_col:
