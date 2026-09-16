@@ -81,42 +81,49 @@ def optimize(
             if pulp.value(a[(u, pf)]) is not None and pulp.value(a[(u, pf)]) > 0.5:
                 ana_atama[u] = pf
 
-    # ANA kapasite — Sicil_Hiz'den gerçek katkı (istisna/dışlanan siciller hariç)
+    # ANA kapasite — portföydeki tüm ANA sicillerin teorik kapasitelerinin toplamı
+    # (GECİCİ düşülmüş maks çalışma süresi; tarihsel değil)
     sicil_aktif = set(tum_siciller)
-    ana_kapasite: dict[str, float] = {pf: 0.0 for pf in ic_pf}
-    ana_katkisi: dict[str, float] = {}
+    pf_ana_siciller: dict[str, list[str]] = {}
     for u, pf in ana_atama.items():
-        if u not in sicil_aktif:
-            continue
-        contrib = portfoy_sicil_sure.get(pf, sicil_portfoy_sure.get((u, pf), 0.0))
-        ana_katkisi[u] = contrib
+        if u in sicil_aktif:
+            pf_ana_siciller.setdefault(pf, []).append(u)
+
+    ana_kapasite: dict[str, float] = {pf: 0.0 for pf in ic_pf}
+    for pf, siciller in pf_ana_siciller.items():
         if pf in ana_kapasite:
-            ana_kapasite[pf] += contrib
+            ana_kapasite[pf] = sum(capacity.get(u, 0.0) for u in siciller)
 
     ana_set: set[tuple] = {(u, pf) for u, pf in ana_atama.items()}
 
     for pf in ic_pf:
         dem = demand.get(pf, 0.0)
+        n_ana = len(pf_ana_siciller.get(pf, []))
         if dem > 0:
             ratio = ana_kapasite[pf] / dem
             uyarilar.append(
                 f"[KAPASITE] Portföy '{pf}': talep={round(dem)}sn, "
-                f"ANA kapasite={round(ana_kapasite[pf])}sn, "
+                f"ANA sicil={n_ana}, ANA kapasite={round(ana_kapasite[pf])}sn, "
                 f"ANA karşılama=%{round(ratio*100,1)}"
             )
-            if ratio > 1.5:
-                uyarilar.append(f"Portföy '{pf}': ANA kapasite talepten %{int((ratio-1)*100)} fazla.")
-            elif ratio < 0.5:
-                uyarilar.append(f"Portföy '{pf}': ANA kapasite talebin yalnızca %{int(ratio*100)}'ini karşılıyor.")
 
     # ── Sicil DESTEK kapasitesi ───────────────────────────────────────────────
-    # Teorik net kapasite (GUN_SN - GECİCİ blok) eksi ANA katkısı = DESTEK'e ayrılabilir süre.
-    # Sicil_Hiz toplamı DEĞİL: tarihsel veri boş/düşük günleri yansıtır, kapasite değil.
+    # Portföyün kullanım oranı = demand / toplam_ANA_kapasite.
+    # Her ANA sicil'in teorik kapasitesinin (1 - kullanım_oranı) kadarı DESTEK'e kalır.
     destek_available: dict[str, float] = {}
     for u in tum_siciller:
-        ana_pay = ana_katkisi.get(u, 0.0)
         teorik = capacity.get(u, 0.0)
-        destek_available[u] = max(teorik - ana_pay, 0.0)
+        pf_ana = ana_atama.get(u)
+        if pf_ana is None:
+            destek_available[u] = teorik
+            continue
+        total_ana_cap = ana_kapasite.get(pf_ana, 0.0)
+        dem_ana = demand.get(pf_ana, 0.0)
+        if total_ana_cap > 0 and dem_ana > 0:
+            utilization = min(dem_ana / total_ana_cap, 1.0)
+            destek_available[u] = teorik * (1.0 - utilization)
+        else:
+            destek_available[u] = teorik
 
     # ── DESTEK KATMANI ────────────────────────────────────────────────────────
     destek_elig = [(u, pf) for (u, pf) in eligible if pf in ic_pf and (u, pf) not in ana_set
