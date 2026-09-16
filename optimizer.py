@@ -110,12 +110,13 @@ def optimize(
                 uyarilar.append(f"Portföy '{pf}': ANA kapasite talebin yalnızca %{int(ratio*100)}'ini karşılıyor.")
 
     # ── Sicil DESTEK kapasitesi ───────────────────────────────────────────────
+    # Teorik net kapasite (GUN_SN - GECİCİ blok) eksi ANA katkısı = DESTEK'e ayrılabilir süre.
+    # Sicil_Hiz toplamı DEĞİL: tarihsel veri boş/düşük günleri yansıtır, kapasite değil.
     destek_available: dict[str, float] = {}
     for u in tum_siciller:
-        toplam = sicil_toplam_sure.get(u, 0.0)
         ana_pay = ana_katkisi.get(u, 0.0)
         teorik = capacity.get(u, 0.0)
-        destek_available[u] = min(max(toplam - ana_pay, 0.0), teorik)
+        destek_available[u] = max(teorik - ana_pay, 0.0)
 
     # ── DESTEK KATMANI ────────────────────────────────────────────────────────
     destek_elig = [(u, pf) for (u, pf) in eligible if pf in ic_pf and (u, pf) not in ana_set
