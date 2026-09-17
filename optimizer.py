@@ -228,6 +228,54 @@ def optimize(
             )
             model_d += Z_d[pf] <= toplam_kap / dem
 
+    # ── Saatlik ANA yeterlilik kontrolü ─────────────────────────────────────
+    # Günlük toplamda ANA kapasitesi talebi karşılıyor gibi görünse bile, ANA
+    # sicillerinden bazıları portföyün en yoğun saatinde GEÇİCİ görevdeyse ve
+    # kalan ANA siciller o saatin yükünü tek başına karşılayamıyorsa, bu saate
+    # özel bir açık vardır. Bu açığı kapatmak için o saatte GEÇİCİ olmayan
+    # DESTEK adaylarının katkısını teşvik eden ayrı bir kapsama terimi (Z_saat)
+    # ekleniyor — sadece günlük ortalamaya bakmak bu saatlik riski gözden kaçırır.
+    Z_saat: dict[str, pulp.LpVariable] = {}
+    for pf, saatlik in pf_saatlik_yogunluk.items():
+        if pf not in ic_pf or not saatlik:
+            continue
+        ana_sicller = pf_ana_siciller.get(pf, [])
+        n_saat = len(saatlik)
+        en_kotu = None
+        for saat_bas, oran in saatlik.items():
+            saat_bit = saat_bas + saat_dilimi_sn
+            ana_kap_saat = 0.0
+            for u in ana_sicller:
+                u_pencere = sicil_gecici_pencere.get(u, [])
+                gecici_bu_saatte = any(min(bit, saat_bit) > max(bas, saat_bas) for bas, bit in u_pencere)
+                if not gecici_bu_saatte:
+                    gercek = sicil_portfoy_sure.get((u, pf))
+                    katki = gercek if gercek is not None else portfoy_sicil_sure.get(pf, 0.0)
+                    ana_kap_saat += katki / n_saat
+            talep_saat = oran * demand.get(pf, 0.0)
+            acik_saat = talep_saat - ana_kap_saat
+            if en_kotu is None or acik_saat > en_kotu[2]:
+                en_kotu = (saat_bas, saat_bit, acik_saat, talep_saat, ana_kap_saat)
+        if en_kotu is None:
+            continue
+        saat_bas, saat_bit, acik_saat, talep_saat, ana_kap_saat = en_kotu
+        if acik_saat <= 0 or talep_saat <= 0:
+            continue
+        pf_list = [(u2, p2) for (u2, p2) in destek_elig if p2 == pf]
+        if not pf_list:
+            continue
+        musait_katki = pulp.lpSum(
+            y[(u2, pf)] * saat_dilimi_sn
+            for (u2, p2) in pf_list
+            if not any(
+                min(bit, saat_bit) > max(bas, saat_bas)
+                for bas, bit in sicil_gecici_pencere.get(u2, [])
+            )
+        )
+        z = pulp.LpVariable(f"Z_saat_{pf}", lowBound=0, upBound=1)
+        model_d += z <= (ana_kap_saat + musait_katki) / talep_saat
+        Z_saat[pf] = z
+
     # Hız dengesi
     speeds = sorted(speed_norm.values())
     medyan_hiz = speeds[len(speeds) // 2] if speeds else 0.5
@@ -264,7 +312,14 @@ def optimize(
         admin_ceza = 0
 
     ort_Z_d = pulp.lpSum(Z_d[pf] for pf in ic_pf) / n_pf
-    model_d += hiz_agirlik * ort_Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza
+    if Z_saat:
+        ort_Z_saat = pulp.lpSum(Z_saat.values()) / len(Z_saat)
+        model_d += (
+            hiz_agirlik * (0.7 * ort_Z_d + 0.3 * ort_Z_saat)
+            - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza
+        )
+    else:
+        model_d += hiz_agirlik * ort_Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza
     model_d.solve(solver)
     durum_destek = pulp.LpStatus[model_d.status]
 
