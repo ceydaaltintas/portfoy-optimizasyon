@@ -157,12 +157,16 @@ def optimize(
     for pf in ic_pf:
         kisi_sure = portfoy_sicil_sure.get(pf, 0.0)
         acik_gunluk = max(demand.get(pf, 0.0) - ana_kapasite.get(pf, 0.0), 0.0)
-        acik_saatlik_esdeger = 0.0
+        needed_gunluk = math.ceil(acik_gunluk / kisi_sure) if kisi_sure > 0 else 0
+        needed_saatlik = 0
         if pf in en_kotu_saat:
-            _, _, acik_saat, _, _, n_saat_pf = en_kotu_saat[pf]
-            acik_saatlik_esdeger = max(acik_saat, 0.0) * n_saat_pf
-        acik = max(acik_gunluk, acik_saatlik_esdeger)
-        needed = math.ceil(acik / kisi_sure) if kisi_sure > 0 else 0
+            _, _, acik_saat, _, _, _ = en_kotu_saat[pf]
+            if acik_saat > 0:
+                # O saatte ek kaç kişi gerekli — günün TÜMÜNE yayılmıyor, sadece
+                # o tek saati kapatacak kişi sayısı (her kişi en fazla 1 saatlik
+                # dilim kadar katkı verebilir varsayımıyla).
+                needed_saatlik = math.ceil(acik_saat / saat_dilimi_sn)
+        needed = max(needed_gunluk, needed_saatlik)
         destek_max_pf[pf] = min(needed, max_destek_sicil)
 
     # Uygunluk: DESTEK için boş süresi olan ve ANA olmayan siciller
