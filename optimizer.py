@@ -331,15 +331,24 @@ def optimize(
     else:
         admin_ceza = 0
 
+    # Az sayıda sicil kullanma teşviki: aynı kapsamayı sağlıyorsa, model yeni bir
+    # sicil aramak yerine zaten seçilmiş/kapasitesi müsait sicili sonuna kadar
+    # kullanmayı tercih etsin (sicillerin çok fazla portföye/saat dilimine
+    # dağılmaması, odaklı çalışabilmeleri için).
+    sicil_sayisi_cezasi = (0.005 / n_elig) * pulp.lpSum(y.values())
+
     ort_Z_d = pulp.lpSum(Z_d[pf] for pf in ic_pf) / n_pf
     if Z_saat:
         ort_Z_saat = pulp.lpSum(Z_saat.values()) / len(Z_saat)
         model_d += (
             hiz_agirlik * (0.7 * ort_Z_d + 0.3 * ort_Z_saat)
-            - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza
+            - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza - sicil_sayisi_cezasi
         )
     else:
-        model_d += hiz_agirlik * ort_Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza
+        model_d += (
+            hiz_agirlik * ort_Z_d - (1 - hiz_agirlik) * hiz_dengesi_penalty
+            - admin_ceza - gecici_ceza - sicil_sayisi_cezasi
+        )
     model_d.solve(solver)
     durum_destek = pulp.LpStatus[model_d.status]
 
