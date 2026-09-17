@@ -117,14 +117,51 @@ def optimize(
             katki_ana = 0.0
         destek_available[u] = max(teorik - katki_ana, 0.0)
 
+    # ── Saatlik ANA yeterlilik kontrolü (en kötü saat) ──────────────────────
+    # Günlük toplamda ANA kapasitesi talebi karşılıyor görünse bile, ANA
+    # sicillerinden bazıları portföyün en yoğun saatinde GEÇİCİ görevdeyse ve
+    # kalan ANA siciller o saatin yükünü tek başına karşılayamıyorsa, bu saate
+    # özel bir açık vardır. Bu, destek_max_pf hesabına da yansıtılmazsa (aşağıda),
+    # günlük açık zaten 0 göründüğü için hiçbir DESTEK adayı bu portföy için
+    # değerlendirmeye bile alınmaz — Z_saat'teki teşvikin hiçbir etkisi olmaz.
+    en_kotu_saat: dict[str, tuple] = {}
+    for pf, saatlik in pf_saatlik_yogunluk.items():
+        if pf not in ic_pf or not saatlik:
+            continue
+        ana_sicller = pf_ana_siciller.get(pf, [])
+        n_saat = len(saatlik)
+        en_kotu = None
+        for saat_bas, oran in saatlik.items():
+            saat_bit = saat_bas + saat_dilimi_sn
+            ana_kap_saat = 0.0
+            for u in ana_sicller:
+                u_pencere = sicil_gecici_pencere.get(u, [])
+                gecici_bu_saatte = any(min(bit, saat_bit) > max(bas, saat_bas) for bas, bit in u_pencere)
+                if not gecici_bu_saatte:
+                    gercek = sicil_portfoy_sure.get((u, pf))
+                    katki = gercek if gercek is not None else portfoy_sicil_sure.get(pf, 0.0)
+                    ana_kap_saat += katki / n_saat
+            talep_saat = oran * demand.get(pf, 0.0)
+            acik_saat = talep_saat - ana_kap_saat
+            if en_kotu is None or acik_saat > en_kotu[2]:
+                en_kotu = (saat_bas, saat_bit, acik_saat, talep_saat, ana_kap_saat, n_saat)
+        if en_kotu is not None:
+            en_kotu_saat[pf] = en_kotu
+
     # ── DESTEK KATMANI ────────────────────────────────────────────────────────
     # Portföy başına max DESTEK = gerçek talep açığını kapatmak için gereken sicil sayısı
     # (talep - ANA kapasitesi) / kişi başı günlük süre. Tarihsel personel sayısına değil,
-    # o günkü gerçek talep-kapasite açığına dayanır.
+    # o günkü gerçek talep-kapasite açığına dayanır. Saatlik en kötü açık (varsa),
+    # günlük-eşdeğere çevrilip bu tavanı da yükseltebilir.
     destek_max_pf: dict[str, int] = {}
     for pf in ic_pf:
         kisi_sure = portfoy_sicil_sure.get(pf, 0.0)
-        acik = max(demand.get(pf, 0.0) - ana_kapasite.get(pf, 0.0), 0.0)
+        acik_gunluk = max(demand.get(pf, 0.0) - ana_kapasite.get(pf, 0.0), 0.0)
+        acik_saatlik_esdeger = 0.0
+        if pf in en_kotu_saat:
+            _, _, acik_saat, _, _, n_saat_pf = en_kotu_saat[pf]
+            acik_saatlik_esdeger = max(acik_saat, 0.0) * n_saat_pf
+        acik = max(acik_gunluk, acik_saatlik_esdeger)
         needed = math.ceil(acik / kisi_sure) if kisi_sure > 0 else 0
         destek_max_pf[pf] = min(needed, max_destek_sicil)
 
@@ -228,37 +265,13 @@ def optimize(
             )
             model_d += Z_d[pf] <= toplam_kap / dem
 
-    # ── Saatlik ANA yeterlilik kontrolü ─────────────────────────────────────
-    # Günlük toplamda ANA kapasitesi talebi karşılıyor gibi görünse bile, ANA
-    # sicillerinden bazıları portföyün en yoğun saatinde GEÇİCİ görevdeyse ve
-    # kalan ANA siciller o saatin yükünü tek başına karşılayamıyorsa, bu saate
-    # özel bir açık vardır. Bu açığı kapatmak için o saatte GEÇİCİ olmayan
-    # DESTEK adaylarının katkısını teşvik eden ayrı bir kapsama terimi (Z_saat)
-    # ekleniyor — sadece günlük ortalamaya bakmak bu saatlik riski gözden kaçırır.
+    # ── Saatlik kapsama terimi (Z_saat) ─────────────────────────────────────
+    # en_kotu_saat (yukarıda, destek_max_pf'ten önce hesaplandı) burada tekrar
+    # kullanılıyor: o saatte GEÇİCİ olmayan DESTEK adaylarının katkısını teşvik
+    # eden ayrı bir kapsama terimi — sadece günlük ortalamaya bakmak bu saatlik
+    # riski gözden kaçırır.
     Z_saat: dict[str, pulp.LpVariable] = {}
-    for pf, saatlik in pf_saatlik_yogunluk.items():
-        if pf not in ic_pf or not saatlik:
-            continue
-        ana_sicller = pf_ana_siciller.get(pf, [])
-        n_saat = len(saatlik)
-        en_kotu = None
-        for saat_bas, oran in saatlik.items():
-            saat_bit = saat_bas + saat_dilimi_sn
-            ana_kap_saat = 0.0
-            for u in ana_sicller:
-                u_pencere = sicil_gecici_pencere.get(u, [])
-                gecici_bu_saatte = any(min(bit, saat_bit) > max(bas, saat_bas) for bas, bit in u_pencere)
-                if not gecici_bu_saatte:
-                    gercek = sicil_portfoy_sure.get((u, pf))
-                    katki = gercek if gercek is not None else portfoy_sicil_sure.get(pf, 0.0)
-                    ana_kap_saat += katki / n_saat
-            talep_saat = oran * demand.get(pf, 0.0)
-            acik_saat = talep_saat - ana_kap_saat
-            if en_kotu is None or acik_saat > en_kotu[2]:
-                en_kotu = (saat_bas, saat_bit, acik_saat, talep_saat, ana_kap_saat)
-        if en_kotu is None:
-            continue
-        saat_bas, saat_bit, acik_saat, talep_saat, ana_kap_saat = en_kotu
+    for pf, (saat_bas, saat_bit, acik_saat, talep_saat, ana_kap_saat, _n_saat) in en_kotu_saat.items():
         if acik_saat <= 0 or talep_saat <= 0:
             continue
         pf_list = [(u2, p2) for (u2, p2) in destek_elig if p2 == pf]
