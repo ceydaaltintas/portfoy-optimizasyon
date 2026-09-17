@@ -155,20 +155,35 @@ def optimize(
     # günlük-eşdeğere çevrilip bu tavanı da yükseltebilir.
     destek_max_pf: dict[str, int] = {}
     for pf in ic_pf:
-        kisi_sure = portfoy_sicil_sure.get(pf, 0.0)
+        # Bir DESTEK sicilinin bu portföye GERÇEKTE verebileceği süre = kendi boş
+        # kapasitesi (teorik gün - ANA katkısı), tipik olarak ~12.000 sn.
+        # portfoy_sicil_sure (o portföyün ANA+DESTEK karışık kişi-başı ortalaması,
+        # ~3.000 sn) kullanılırsa, her adayın yalnızca o kadarcık katkı vereceği
+        # varsayılır ve gereken kişi sayısı 3-4 KAT fazla çıkar — portföyler
+        # gereksiz yere tavana dayanır.
+        aday_kapasite = sorted(
+            destek_available[u]
+            for u in tum_siciller
+            if (u, pf) in eligible and (u, pf) not in ana_set
+            and destek_available.get(u, 0.0) > 0
+        )
+        kisi_katki = (
+            aday_kapasite[len(aday_kapasite) // 2] if aday_kapasite
+            else portfoy_sicil_sure.get(pf, 0.0)
+        )
         acik_gunluk = max(demand.get(pf, 0.0) - ana_kapasite.get(pf, 0.0), 0.0)
-        needed_gunluk = math.ceil(acik_gunluk / kisi_sure) if kisi_sure > 0 else 0
+        needed_gunluk = math.ceil(acik_gunluk / kisi_katki) if kisi_katki > 0 else 0
+
+        # Saatlik ihtiyaç: AYNI sicil her saat dilimine destek verebildiği için
+        # saatlik ihtiyaçlar TOPLANMAZ — yalnızca en kötü saatin ihtiyacı alınır
+        # (en_kotu_saat zaten saatler arasında maksimumu buluyor). O saatte bir
+        # kişi en fazla bir saat dilimi kadar katkı verebilir.
         needed_saatlik = 0
         if pf in en_kotu_saat:
             _, _, acik_saat, _, _, _ = en_kotu_saat[pf]
             if acik_saat > 0:
-                # O saatte ek kaç kişi gerekli — günün TÜMÜNE yayılmıyor, sadece
-                # o tek saati kapatacak kişi sayısı (her kişi en fazla 1 saatlik
-                # dilim kadar katkı verebilir varsayımıyla). Tavana katkısı küçük
-                # bir sabitle sınırlı tutuluyor — asıl "ne kadar kullanılsın"
-                # kararını amaç fonksiyonundaki Z_saat teşviki veriyor, bu tavan
-                # sadece adayların modele girebilmesi için kapıyı açık tutuyor.
-                needed_saatlik = 1
+                needed_saatlik = math.ceil(acik_saat / saat_dilimi_sn)
+
         needed = max(needed_gunluk, needed_saatlik)
         destek_max_pf[pf] = min(needed, max_destek_sicil)
 
