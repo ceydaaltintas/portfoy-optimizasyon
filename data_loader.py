@@ -40,6 +40,15 @@ def _col(df: pd.DataFrame, *candidates) -> str | None:
     return None
 
 
+# Portföy adı karşılaştırma anahtarı: elle girilen İstisna kayıtlarının, boşluk /
+# büyük-küçük harf / Türkçe karakter farkı yüzünden sessizce eşleşmemesini önler.
+_TR_HARF = str.maketrans("ıİiIşŞğĞüÜöÖçÇ", "IIIISSGGUUOOCC")
+
+
+def _pf_key(s) -> str:
+    return re.sub(r"\s+", " ", str(s).strip()).translate(_TR_HARF).upper()
+
+
 def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pct: float = 0.0,
          saatlik_mola_dk: int = 5, ogle_arasi_dk: int = 45) -> tuple[dict, list[str], list[str]]:
     uyarilar: list[str] = []
@@ -169,8 +178,6 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
                     istisna_portfoy.add(pf)
                 else:
                     istisna_set.add((s, pf))
-                if pf and pf not in tum_portfoyler:
-                    uyarilar.append(f"İstisna: Portföy '{pf}' Mevcut_Atama'da yok.")
         else:
             for s in ist["Sicil"].unique():
                 if s:
@@ -179,11 +186,6 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     if istisna_sicil:
         uyarilar.append(f"Optimizasyondan dışlanan siciller: {', '.join(sorted(istisna_sicil))}")
         tum_siciller = [s for s in tum_siciller if s not in istisna_sicil]
-
-    if istisna_portfoy:
-        uyarilar.append(
-            f"DESTEK ataması yapılmayacak portföyler: {', '.join(sorted(istisna_portfoy))}"
-        )
 
     # ── Portfoy_Is_Yuku ───────────────────────────────────────────────────────
     piy = sheets["Portfoy_Is_Yuku"].copy()
@@ -475,6 +477,35 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         for pf in talepsiz:
             uyarilar.append(f"Portföy '{pf}': Portfoy_Is_Yuku'da talep verisi yok, optimizasyondan çıkarıldı.")
         ic_pf = [pf for pf in ic_pf if pf not in talepsiz]
+
+    # ── İstisna portföy adlarını gerçek portföylerle eşleştir ────────────────
+    # ic_pf kesinleştikten sonra yapılır. Eşleştirme boşluk/büyük-küçük harf/
+    # Türkçe karakter farkına toleranslıdır; hiç eşleşmeyen kayıt için AÇIK uyarı
+    # verilir (yoksa kullanıcı istisna yazdığını sanır ama sessizce hiçbir şey olmaz).
+    _pf_lookup = {_pf_key(p): p for p in ic_pf}
+
+    def _eslestir(ad: str, kaynak: str) -> str | None:
+        gercek = _pf_lookup.get(_pf_key(ad))
+        if gercek is None:
+            uyarilar.append(
+                f"İstisna: '{ad}' portföyü bulunamadı ({kaynak}), bu satır dikkate alınmadı. "
+                f"Geçerli portföyler: {', '.join(sorted(ic_pf))}"
+            )
+        return gercek
+
+    istisna_portfoy = {
+        g for pf in istisna_portfoy
+        if (g := _eslestir(pf, "DESTEK engelleme")) is not None
+    }
+    istisna_set = {
+        (s, g) for (s, pf) in istisna_set
+        if (g := _eslestir(pf, f"sicil {s}")) is not None
+    }
+
+    if istisna_portfoy:
+        uyarilar.append(
+            f"DESTEK ataması yapılmayacak portföyler: {', '.join(sorted(istisna_portfoy))}"
+        )
 
     # ── Eligible set: tüm (sicil × iç portföy), yalnızca istisna çıkar ──────
     eligible: set[tuple] = set()
