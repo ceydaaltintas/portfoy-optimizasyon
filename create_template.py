@@ -68,7 +68,7 @@ SHEETS = {
     },
     "Istisna": {
         "cols": ["Sicil", "Portfoy"],
-        "note": "İki kullanım: (1) Sicil + Portfoy dolu → o çifte hiç atama yapılmaz. (2) Sadece Sicil dolu, Portfoy boş → o sicil optimizasyondan tamamen dışlanır.",
+        "note": "Üç kullanım, her satır ayrı değerlendirilir: (1) Sicil + Portfoy dolu → o çifte hiç atama yapılmaz. (2) Sadece Sicil dolu, Portfoy boş → o sicil optimizasyondan tamamen dışlanır. (3) Sicil boş, sadece Portfoy dolu → o portföye hiç DESTEK sicil atanmaz.",
     },
     "Havuzda_Bekleme": {
         "cols": [

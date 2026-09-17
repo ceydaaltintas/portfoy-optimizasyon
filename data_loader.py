@@ -146,29 +146,44 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     ]
 
     # ── İstisna ───────────────────────────────────────────────────────────────
+    # Üç kullanım; her satır BAĞIMSIZ değerlendirilir, aynı sayfada karışık olabilir:
+    #   (1) Sicil dolu,  Portfoy boş  → sicil optimizasyondan tamamen dışlanır
+    #   (2) Sicil dolu,  Portfoy dolu → o (sicil, portföy) çiftine atama yapılmaz
+    #   (3) Sicil boş,   Portfoy dolu → o portföye hiç DESTEK sicil atanmaz
     ist = sheets["Istisna"].copy()
+    ist.columns = [str(c).strip() for c in ist.columns]
     istisna_set: set[tuple] = set()
     istisna_sicil: set[str] = set()
+    istisna_portfoy: set[str] = set()
     if not ist.empty and "Sicil" in ist.columns:
         ist["Sicil"] = _cs(ist["Sicil"])
-        ist = ist[ist["Sicil"] != ""]
         if "Portfoy" in ist.columns:
             ist["Portfoy"] = _cs(ist["Portfoy"])
             for _, row in ist.iterrows():
-                pf, s = row["Portfoy"], row["Sicil"]
+                s, pf = row["Sicil"], row["Portfoy"]
+                if not s and not pf:
+                    continue
                 if not pf:
                     istisna_sicil.add(s)
+                elif not s:
+                    istisna_portfoy.add(pf)
                 else:
                     istisna_set.add((s, pf))
-                    if pf not in tum_portfoyler:
-                        uyarilar.append(f"İstisna: Portföy '{pf}' Mevcut_Atama'da yok.")
+                if pf and pf not in tum_portfoyler:
+                    uyarilar.append(f"İstisna: Portföy '{pf}' Mevcut_Atama'da yok.")
         else:
             for s in ist["Sicil"].unique():
-                istisna_sicil.add(s)
+                if s:
+                    istisna_sicil.add(s)
 
     if istisna_sicil:
         uyarilar.append(f"Optimizasyondan dışlanan siciller: {', '.join(sorted(istisna_sicil))}")
         tum_siciller = [s for s in tum_siciller if s not in istisna_sicil]
+
+    if istisna_portfoy:
+        uyarilar.append(
+            f"DESTEK ataması yapılmayacak portföyler: {', '.join(sorted(istisna_portfoy))}"
+        )
 
     # ── Portfoy_Is_Yuku ───────────────────────────────────────────────────────
     piy = sheets["Portfoy_Is_Yuku"].copy()
@@ -485,6 +500,7 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         "eligible": eligible,
         "ana_atama_mevcut": ana_atama_mevcut,
         "istisna_set": istisna_set,
+        "istisna_portfoy": istisna_portfoy,
         "gecici_mevcut": gecici_mevcut,
         "portfoy_aktif": portfoy_aktif,
         "portfoy_sicil_sure": portfoy_sicil_sure,

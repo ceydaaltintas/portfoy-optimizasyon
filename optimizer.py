@@ -28,6 +28,9 @@ def optimize(
     pf_ana_gecici: dict[str, list] = data.get("pf_ana_gecici", {})
     pf_saatlik_yogunluk: dict[str, dict[int, float]] = data.get("pf_saatlik_yogunluk", {})
     saat_dilimi_sn: int = data.get("saat_dilimi_sn", 3600)
+    # İstisna sayfasında "Sicil boş, Portfoy dolu" satırıyla işaretlenen portföyler:
+    # bunlara hiç DESTEK sicil atanmaz (ANA ataması etkilenmez).
+    istisna_portfoy: set[str] = data.get("istisna_portfoy", set())
 
     solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=120, gapRel=0.05)
 
@@ -155,6 +158,10 @@ def optimize(
     # günlük-eşdeğere çevrilip bu tavanı da yükseltebilir.
     destek_max_pf: dict[str, int] = {}
     for pf in ic_pf:
+        # İstisna: bu portföye hiç DESTEK atanmayacak
+        if pf in istisna_portfoy:
+            destek_max_pf[pf] = 0
+            continue
         # Bir DESTEK sicilinin bu portföye GERÇEKTE verebileceği süre = kendi boş
         # kapasitesi (teorik gün - ANA katkısı), tipik olarak ~12.000 sn.
         # portfoy_sicil_sure (o portföyün ANA+DESTEK karışık kişi-başı ortalaması,
