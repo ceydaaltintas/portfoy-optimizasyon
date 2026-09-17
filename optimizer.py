@@ -26,6 +26,8 @@ def optimize(
     portfoy_sicil_sure: dict[str, float] = data.get("portfoy_sicil_sure", {})
     sicil_gecici_pencere: dict[str, list] = data.get("sicil_gecici_pencere", {})
     pf_ana_gecici: dict[str, list] = data.get("pf_ana_gecici", {})
+    pf_saatlik_yogunluk: dict[str, dict[int, float]] = data.get("pf_saatlik_yogunluk", {})
+    saat_dilimi_sn: int = data.get("saat_dilimi_sn", 3600)
 
     solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=120, gapRel=0.05)
 
@@ -155,12 +157,42 @@ def optimize(
     # fazla kapasiteyi diğer ihtiyaçlı portföylere hiç yönlendirmez).
     Z_d = {pf: pulp.LpVariable(f"Z_d_{pf}", lowBound=0, upBound=1) for pf in ic_pf}
 
+    # GEÇİCİ saatlerinin hedef portföyün GERÇEK referans yoğunluğuyla örtüşen kısmı:
+    # bir sicilin GEÇİCİ saatleri, o portföye referansların yoğun geldiği saatlere denk
+    # geliyorsa, o saatlerde zaten müsait olmadığı için gerçek faydası azalır. Bu, sicilin
+    # DESTEK katkı üst sınırından doğrudan düşülür (Havuzda_Bekleme sayfası varsa gerçek
+    # saatlik veriyle, yoksa eski proxy — portföyün ANA grubunun GEÇİCİ saatleri — ile).
+    def _cakisma_dk(p1, p2):
+        return sum(max(0, min(a_bit, b_bit) - max(a_bas, b_bas)) for a_bas, a_bit in p1 for b_bas, b_bit in p2)
+
+    kayip_orani: dict[tuple, float] = {}
+    for (u, pf) in destek_elig:
+        u_pencere = sicil_gecici_pencere.get(u, [])
+        saatlik = pf_saatlik_yogunluk.get(pf, {})
+        if u_pencere and saatlik:
+            kayip = 0.0
+            for saat_bas, oran in saatlik.items():
+                saat_bit = saat_bas + saat_dilimi_sn
+                cakisma = sum(max(0, min(bit, saat_bit) - max(bas, saat_bas)) for bas, bit in u_pencere)
+                kayip += (cakisma / saat_dilimi_sn) * oran
+            kayip_orani[(u, pf)] = min(kayip, 1.0)
+        else:
+            pf_pencere = pf_ana_gecici.get(pf, [])
+            if u_pencere and pf_pencere:
+                cakisma = _cakisma_dk(u_pencere, pf_pencere)
+                toplam_ana = sum(bit - bas for bas, bit in pf_pencere)
+                kayip_orani[(u, pf)] = min(cakisma / max(toplam_ana, 1), 1.0)
+            else:
+                kayip_orani[(u, pf)] = 0.0
+
     # Bir DESTEK sicili tek bir portföye kendi boştaki tüm kapasitesini verebilir
     # (portföyün ortalama kişi payıyla sınırlı değil) — böylece az sayıda müsait
-    # sicil, onlarca farklı kişi aramak yerine açığı tek başına kapatabilir.
+    # sicil, onlarca farklı kişi aramak yerine açığı tek başına kapatabilir. GEÇİCİ
+    # çakışması varsa bu kapasite, örtüşen oran kadar önceden azaltılır.
     for (u, pf) in destek_elig:
         avail = destek_available.get(u, 0.0)
-        model_d += t[(u, pf)] <= avail * y[(u, pf)]
+        kullanilabilir = avail * (1 - kayip_orani.get((u, pf), 0.0))
+        model_d += t[(u, pf)] <= kullanilabilir * y[(u, pf)]
 
     # Sicil toplam DESTEK süresi ≤ destek_available
     for u in tum_siciller:
@@ -212,24 +244,12 @@ def optimize(
     n_pf = max(len(ic_pf), 1)
     hiz_dengesi_penalty = pulp.lpSum(fark_pos[pf] + fark_neg[pf] for pf in ic_pf) / n_pf
 
-    # GECİCİ çakışma penaltisi
-    def _cakisma_dk(p1, p2):
-        return sum(max(0, min(a_bit, b_bit) - max(a_bas, b_bas)) for a_bas, a_bit in p1 for b_bas, b_bit in p2)
-
-    gecici_ceza_katsayi: dict[tuple, float] = {}
-    for (u, pf) in destek_elig:
-        u_pencere = sicil_gecici_pencere.get(u, [])
-        pf_pencere = pf_ana_gecici.get(pf, [])
-        if u_pencere and pf_pencere:
-            cakisma = _cakisma_dk(u_pencere, pf_pencere)
-            toplam_ana = sum(bit - bas for bas, bit in pf_pencere)
-            gecici_ceza_katsayi[(u, pf)] = cakisma / max(toplam_ana, 1)
-        else:
-            gecici_ceza_katsayi[(u, pf)] = 0.0
-
+    # GEÇİCİ çakışma cezası: ana etkisi artık kapasite tarafında (yukarıda,
+    # kullanilabilir hesabında); burada eşit kapsamalı adaylar arasında düşük
+    # çakışmalıyı hafifçe önceliklendiren küçük bir ek terim olarak kalıyor.
     n_elig = max(len(destek_elig), 1)
     gecici_ceza = (0.001 / n_elig) * pulp.lpSum(
-        gecici_ceza_katsayi[(u, pf)] * y[(u, pf)] for (u, pf) in destek_elig
+        kayip_orani[(u, pf)] * y[(u, pf)] for (u, pf) in destek_elig
     )
 
     # Admin siciller DESTEK'te son tercih

@@ -370,6 +370,8 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
     # Varsa: portföy bazında bekleyen oran hesaplanır, yüksek bekleyen portföylerin
     # talebi şişirilerek optimizer daha fazla kapasite yönlendirmeye zorlanır.
     bekleme_katsayisi: dict[str, float] = {}
+    pf_saatlik_yogunluk: dict[str, dict[int, float]] = {}
+    saat_dilimi_sn = 3600
     if "Havuzda_Bekleme" in sheets:
         hb = sheets["Havuzda_Bekleme"].copy()
         hb.columns = [str(c).strip() for c in hb.columns]
@@ -384,6 +386,7 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
             if "Saat" in hb.columns:
                 saat_str = hb["Saat"].astype(str).str.strip().str[:5]
                 yarim_saatlik = saat_str.str.endswith(":30").any()
+                saat_dilimi_sn = 1800 if yarim_saatlik else 3600
                 bas = "08:30" if yarim_saatlik else "09:00"
                 hb = hb[(saat_str >= bas) & (saat_str <= "17:00")]
             if not hb.empty:
@@ -410,6 +413,24 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
                         f"Havuzda_Bekleme verisi kullanıldı: "
                         f"{len(bekleme_katsayisi)} portföy için talep ağırlığı ayarlandı."
                     )
+
+                # Portföy başına saatlik referans yoğunluk profili: bir portföyün
+                # günlük referans hacminin hangi saat dilimine ne kadarının düştüğü.
+                # DESTEK ataması sırasında bir sicilin GEÇİCİ saatleri, hedef
+                # portföyün gerçekten yoğun olduğu saatlerle çakışıyorsa bu bilgi
+                # kullanılır (bkz. optimizer.py — saatlik çakışma cezası).
+                saat_sn = hb["Saat"].astype(str).str.strip().str[:5].apply(_parse_hhmm) if "Saat" in hb.columns else None
+                pf_saatlik_yogunluk: dict[str, dict[int, float]] = {}
+                if saat_sn is not None:
+                    hb_saat = hb.copy()
+                    hb_saat["_saat_sn"] = saat_sn
+                    saat_grp = hb_saat.groupby(["Portfoy", "_saat_sn"])["Gelen_Ref"].sum().reset_index()
+                    pf_gunluk_toplam = saat_grp.groupby("Portfoy")["Gelen_Ref"].sum().to_dict()
+                    for _, row in saat_grp.iterrows():
+                        pf = row["Portfoy"]
+                        toplam = pf_gunluk_toplam.get(pf, 0.0)
+                        if toplam > 0:
+                            pf_saatlik_yogunluk.setdefault(pf, {})[int(row["_saat_sn"])] = row["Gelen_Ref"] / toplam
 
     # ── Talep: gerçek iş hacmi (referans adedi × referans başı süre) ─────────
     # Portfoy_Is_Yuku'daki günlük referans adedini kullanır — böylece talep,
@@ -473,4 +494,6 @@ def load(sheets: dict[str, pd.DataFrame], sure_tipi: str = "Medyan", tolerans_pc
         "mevcut_atama_raw": mevcut_atama_raw,
         "sicil_gecici_pencere": sicil_gecici_pencere,
         "pf_ana_gecici": pf_ana_gecici,
+        "pf_saatlik_yogunluk": pf_saatlik_yogunluk,
+        "saat_dilimi_sn": saat_dilimi_sn,
     }, uyarilar, hatalar
