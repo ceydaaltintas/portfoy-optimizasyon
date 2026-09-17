@@ -79,7 +79,12 @@ def optimize(
                 ana_atama[u] = pf
 
     # ── ANA kapasite ─────────────────────────────────────────────────────────
-    # N_ana × portfoy_sicil_sure = portföydeki ANA sicillerin toplam günlük katkısı
+    # Her ANA sicilinin GERÇEK ölçülen (sicil, portföy) süresi toplanır (Sicil_Hiz).
+    # portfoy_sicil_sure (Portfoy_Aktif_Sicil'den) yalnızca gerçek veri eksikse
+    # yedek olarak kullanılır. portfoy_sicil_sure, o portföye dokunan HERKESİN
+    # (ANA + DESTEK karışık) ortalamasıdır — DESTEK'in kısa süreli katkıları
+    # ortalamayı aşağı çektiği için yalnızca N_ana × bu ortalama kullanmak,
+    # kadrolu ANA sicillerin gerçek katkısını olduğundan çok düşük gösterirdi.
     sicil_aktif = set(tum_siciller)
     pf_ana_siciller: dict[str, list[str]] = {}
     for u, pf in ana_atama.items():
@@ -88,18 +93,26 @@ def optimize(
 
     ana_kapasite: dict[str, float] = {}
     for pf in ic_pf:
-        n_ana = len(pf_ana_siciller.get(pf, []))
-        ana_kapasite[pf] = n_ana * portfoy_sicil_sure.get(pf, 0.0)
+        toplam = 0.0
+        for u in pf_ana_siciller.get(pf, []):
+            gercek = sicil_portfoy_sure.get((u, pf))
+            toplam += gercek if gercek is not None else portfoy_sicil_sure.get(pf, 0.0)
+        ana_kapasite[pf] = toplam
 
     ana_set: set[tuple] = {(u, pf) for u, pf in ana_atama.items()}
 
     # ── Sicil DESTEK kapasitesi ───────────────────────────────────────────────
-    # Günlük teorik kapasite eksi ANA portföyüne katkı = DESTEK için kalan süre
+    # Günlük teorik kapasite eksi ANA portföyüne GERÇEK katkı = DESTEK için kalan süre
     destek_available: dict[str, float] = {}
     for u in tum_siciller:
         teorik = capacity.get(u, 0.0)
         pf_ana = ana_atama.get(u)
-        katki_ana = portfoy_sicil_sure.get(pf_ana, 0.0) if pf_ana else 0.0
+        if pf_ana:
+            katki_ana = sicil_portfoy_sure.get((u, pf_ana))
+            if katki_ana is None:
+                katki_ana = portfoy_sicil_sure.get(pf_ana, 0.0)
+        else:
+            katki_ana = 0.0
         destek_available[u] = max(teorik - katki_ana, 0.0)
 
     # ── DESTEK KATMANI ────────────────────────────────────────────────────────
