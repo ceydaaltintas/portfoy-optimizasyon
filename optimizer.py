@@ -168,7 +168,7 @@ def optimize(
                 # bir sabitle sınırlı tutuluyor — asıl "ne kadar kullanılsın"
                 # kararını amaç fonksiyonundaki Z_saat teşviki veriyor, bu tavan
                 # sadece adayların modele girebilmesi için kapıyı açık tutuyor.
-                needed_saatlik = min(math.ceil(acik_saat / saat_dilimi_sn), 2)
+                needed_saatlik = 1
         needed = max(needed_gunluk, needed_saatlik)
         destek_max_pf[pf] = min(needed, max_destek_sicil)
 
@@ -334,14 +334,18 @@ def optimize(
     # Az sayıda sicil kullanma teşviki: aynı kapsamayı sağlıyorsa, model yeni bir
     # sicil aramak yerine zaten seçilmiş/kapasitesi müsait sicili sonuna kadar
     # kullanmayı tercih etsin (sicillerin çok fazla portföye/saat dilimine
-    # dağılmaması, odaklı çalışabilmeleri için).
-    sicil_sayisi_cezasi = (0.005 / n_elig) * pulp.lpSum(y.values())
+    # dağılmaması, odaklı çalışabilmeleri için). Gerçek operasyon daha az DESTEK'le
+    # sorunsuz çalıştığı için bu teşvik belirgin şekilde güçlü tutuluyor.
+    sicil_sayisi_cezasi = (0.03 / n_elig) * pulp.lpSum(y.values())
 
     ort_Z_d = pulp.lpSum(Z_d[pf] for pf in ic_pf) / n_pf
     if Z_saat:
+        # Saatlik terim küçük bir ağırlıkla ek sinyal olarak kalıyor — asıl
+        # belirleyici günlük kapsama (Z_d); saatlik risk tek başına aşırı
+        # DESTEK'e yol açmasın diye ağırlığı düşürüldü.
         ort_Z_saat = pulp.lpSum(Z_saat.values()) / len(Z_saat)
         model_d += (
-            hiz_agirlik * (0.7 * ort_Z_d + 0.3 * ort_Z_saat)
+            hiz_agirlik * (0.9 * ort_Z_d + 0.1 * ort_Z_saat)
             - (1 - hiz_agirlik) * hiz_dengesi_penalty - admin_ceza - gecici_ceza - sicil_sayisi_cezasi
         )
     else:
