@@ -164,8 +164,11 @@ def optimize(
             if acik_saat > 0:
                 # O saatte ek kaç kişi gerekli — günün TÜMÜNE yayılmıyor, sadece
                 # o tek saati kapatacak kişi sayısı (her kişi en fazla 1 saatlik
-                # dilim kadar katkı verebilir varsayımıyla).
-                needed_saatlik = math.ceil(acik_saat / saat_dilimi_sn)
+                # dilim kadar katkı verebilir varsayımıyla). Tavana katkısı küçük
+                # bir sabitle sınırlı tutuluyor — asıl "ne kadar kullanılsın"
+                # kararını amaç fonksiyonundaki Z_saat teşviki veriyor, bu tavan
+                # sadece adayların modele girebilmesi için kapıyı açık tutuyor.
+                needed_saatlik = min(math.ceil(acik_saat / saat_dilimi_sn), 2)
         needed = max(needed_gunluk, needed_saatlik)
         destek_max_pf[pf] = min(needed, max_destek_sicil)
 
